@@ -5,9 +5,9 @@ Claude Code mods (function-hook plugins) for working across many repos and many 
 | Mod | What it does |
 | --- | --- |
 | **where-am-i** | A band above the prompt: `📁 repo  🌿 branch ↑2  ± 3 changed  🎯 task`. `/task <text>` names what this session is doing. |
-| **done-ping** | When a turn over 30 s finishes: a macOS notification (repo, duration, your prompt) and a spoken "backend-ng done". Also speaks up when Claude is waiting on a permission prompt. |
+| **done-ping** | A macOS notification (repo, duration, your prompt) with a sound per kind: 🔔 Glass when a turn over 30 s is done, Basso when it failed, Submarine when Claude is waiting on you. Change them in `SOUNDS`. |
 | **repo-guard** | Blocks `push --force`, pushes to main/master, `reset --hard`, `clean -f`, `checkout .`, `branch -D`, `stash clear`, `rm -rf ~`. Asks before Claude first edits a repo other than the session's own. |
-| **claude-pet** | A status-line pet that earns xp from your work, grows 🥚 → 🦅, gets dizzy on errors, sleeps when you're away, and unlocks achievements. `/pet`, `/pet name <name>`. |
+| **claude-pet** | A status-line pet that earns xp from your work, grows 🥚 → 🦅, gets dizzy on errors, sleeps when you're away, and unlocks achievements. Hero plays on a level up. `/pet`, `/pet name <name>`. |
 | **claude-mood** | Claude's mood in the status line: 🤔 reading, ✍️ writing, 🧪 testing, 😤 after a few errors, 😌 when done — with 📖 ✏️ ⚡ 💥 counters. |
 
 ## Install

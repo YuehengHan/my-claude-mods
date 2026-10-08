@@ -83,7 +83,7 @@ async function gain($: EngineInterface, xp: number, unlock: string[] = []) {
   for (const a of newOnes) $.ui.toast(`🏆 ${ACHIEVEMENTS[a]}`, { timeoutMs: 6000 })
   if (after > before) {
     $.ui.toast(`🎉 ${pet.name} reached level ${after}! ${stageOf(after)}`, { timeoutMs: 6000 })
-    void $.audio.speak(`${pet.name} leveled up`).catch(() => undefined)
+    void $.process.run(['afplay', '/System/Library/Sounds/Hero.aiff'], { timeoutMs: 10_000 }).catch(() => undefined)
     mood = 'party'
   }
   draw($)
@@ -162,7 +162,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'pet' }, async ($, e) => {
-    const m = /^name\s+(.+)$/.exec(e.args.trim())
+    const m = /^(?:re)?name\s+(.+)$/.exec(e.args.trim())
     pet = await load($)
     if (m) {
       pet = { ...pet, name: (m[1] ?? '').trim().slice(0, 20) || pet.name }

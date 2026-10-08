@@ -3,6 +3,17 @@ import type { EngineInterface, Register } from 'claude-code'
 /** Turns shorter than this finish while you are still watching: no ping. */
 const MIN_TURN_MS = 30_000
 
+/**
+ * One macOS system sound per kind of ping, so you can tell them apart without
+ * looking. Any name in /System/Library/Sounds works: Basso Blow Bottle Frog
+ * Funk Glass Hero Morse Ping Pop Purr Sosumi Submarine Tink.
+ */
+export const SOUNDS = {
+  done: 'Glass',
+  failed: 'Basso',
+  needsYou: 'Submarine',
+} as const
+
 const basename = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path
 
 export function formatDuration(ms: number): string {
@@ -25,7 +36,9 @@ async function repo($: EngineInterface): Promise<string> {
   return repoName
 }
 
-async function ping($: EngineInterface, title: string, body: string, spoken: string) {
+async function ping($: EngineInterface, title: string, body: string, sound: string) {
+  // afplay plays even when Focus mode mutes notification sounds.
+  void $.process.run(['afplay', `/System/Library/Sounds/${sound}.aiff`], { timeoutMs: 10_000 }).catch(() => undefined)
   // argv keeps quotes in the prompt text from breaking the AppleScript.
   await $.process
     .run(
@@ -40,7 +53,6 @@ async function ping($: EngineInterface, title: string, body: string, spoken: str
       { timeoutMs: 5000 },
     )
     .catch(() => undefined)
-  await $.audio.speak(spoken).catch(() => undefined)
 }
 
 export const register: Register = on => {
@@ -59,7 +71,7 @@ export const register: Register = on => {
       $,
       `${ok ? '✅' : '❌'} ${name} · ${formatDuration(e.durationMs)}`,
       snippet(lastPrompt) || (ok ? 'Done' : 'Ended with an error'),
-      `${name} ${ok ? 'done' : 'failed'}`,
+      ok ? SOUNDS.done : SOUNDS.failed,
     )
     return done
   })
@@ -69,7 +81,7 @@ export const register: Register = on => {
     const ran = await next(e)
     if (e.notification_type === 'permission_prompt' || e.notification_type === 'elicitation_dialog') {
       const name = await repo($)
-      void ping($, `✋ ${name} needs you`, snippet(e.message), `${name} needs you`)
+      void ping($, `✋ ${name} needs you`, snippet(e.message), SOUNDS.needsYou)
     }
     return ran
   })
