@@ -14,6 +14,9 @@ export const SOUNDS = {
   needsYou: 'Submarine',
 } as const
 
+/** afplay volume: 1 is full, 0.3 a soft chime. */
+export const VOLUME = 0.3
+
 const basename = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path
 
 export function formatDuration(ms: number): string {
@@ -38,7 +41,7 @@ async function repo($: EngineInterface): Promise<string> {
 
 async function ping($: EngineInterface, title: string, body: string, sound: string) {
   // afplay plays even when Focus mode mutes notification sounds.
-  void $.process.run(['afplay', `/System/Library/Sounds/${sound}.aiff`], { timeoutMs: 10_000 }).catch(() => undefined)
+  void $.process.run(['afplay', '-v', String(VOLUME), `/System/Library/Sounds/${sound}.aiff`], { timeoutMs: 10_000 }).catch(() => undefined)
   // argv keeps quotes in the prompt text from breaking the AppleScript.
   await $.process
     .run(
