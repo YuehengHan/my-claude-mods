@@ -1,0 +1,36 @@
+{
+  "name": "my-claude-mods",
+  "owner": {
+    "name": "YuehengHan"
+  },
+  "metadata": {
+    "description": "YuehengHan's Claude Code mods for multi-repo, multi-session work (and a pet)"
+  },
+  "plugins": [
+    {
+      "name": "where-am-i",
+      "source": "./plugins/where-am-i",
+      "description": "A band above the prompt: repo, branch, uncommitted changes and this session's /task"
+    },
+    {
+      "name": "done-ping",
+      "source": "./plugins/done-ping",
+      "description": "macOS notification + spoken '<repo> done' when a long turn finishes or Claude needs you"
+    },
+    {
+      "name": "repo-guard",
+      "source": "./plugins/repo-guard",
+      "description": "Blocks destructive git commands; asks before Claude first edits another repo"
+    },
+    {
+      "name": "claude-pet",
+      "source": "./plugins/claude-pet",
+      "description": "A status-line pet that levels up with your work and unlocks achievements"
+    },
+    {
+      "name": "claude-mood",
+      "source": "./plugins/claude-mood",
+      "description": "Claude's mood in the status line, from what the turn has read, written and broken"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "claude-mood",
+  "version": "0.1.0",
+  "description": "Claude's mood in the status line, from what this turn has read, written and broken",
+  "author": {
+    "name": "YuehengHan"
+  }
+}

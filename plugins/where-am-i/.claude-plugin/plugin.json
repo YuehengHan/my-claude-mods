@@ -1,0 +1,9 @@
+{
+  "name": "where-am-i",
+  "version": "0.1.0",
+  "description": "A band above the prompt: repo, branch, uncommitted changes and this session's task",
+  "author": {
+    "name": "YuehengHan"
+  },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "repo-guard",
+  "version": "0.1.0",
+  "description": "Blocks destructive git commands and asks before Claude first edits a repo other than the session's own",
+  "author": {
+    "name": "YuehengHan"
+  }
+}

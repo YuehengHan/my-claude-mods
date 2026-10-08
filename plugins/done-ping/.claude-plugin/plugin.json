@@ -1,0 +1,8 @@
+{
+  "name": "done-ping",
+  "version": "0.1.0",
+  "description": "When a long turn finishes or Claude needs you: a macOS notification plus a spoken '<repo> done'",
+  "author": {
+    "name": "YuehengHan"
+  }
+}

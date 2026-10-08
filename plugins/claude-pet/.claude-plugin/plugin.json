@@ -1,0 +1,8 @@
+{
+  "name": "claude-pet",
+  "version": "0.1.0",
+  "description": "A pet in the status line that grows with your work, gets dizzy on errors, sleeps when you're away, and unlocks achievements",
+  "author": {
+    "name": "YuehengHan"
+  }
+}
