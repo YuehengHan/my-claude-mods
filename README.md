@@ -34,7 +34,14 @@ claude plugin marketplace add ~/Desktop/my-claude-mods
 claude plugin install where-am-i@my-claude-mods --scope user
 ```
 
-Edit a mod, then run `/reload-plugins` in a session.
+Claude Code runs an installed copy, so after editing a mod bump its `version` in `plugin.json`, then:
+
+```
+claude plugin marketplace update my-claude-mods
+claude plugin update <mod>@my-claude-mods
+```
+
+and run `/reload-plugins` (or restart) in each open session.
 
 Check and test a mod:
 
