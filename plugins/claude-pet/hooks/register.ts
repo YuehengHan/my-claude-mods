@@ -83,7 +83,7 @@ async function gain($: EngineInterface, xp: number, unlock: string[] = []) {
   for (const a of newOnes) $.ui.toast(`🏆 ${ACHIEVEMENTS[a]}`, { timeoutMs: 6000 })
   if (after > before) {
     $.ui.toast(`🎉 ${pet.name} reached level ${after}! ${stageOf(after)}`, { timeoutMs: 6000 })
-    void $.process.run(['afplay', '-v', '0.3', '/System/Library/Sounds/Hero.aiff'], { timeoutMs: 10_000 }).catch(() => undefined)
+    void $.process.run(['afplay', '-v', '0.05', '/System/Library/Sounds/Hero.aiff'], { timeoutMs: 10_000 }).catch(() => undefined)
     mood = 'party'
   }
   draw($)

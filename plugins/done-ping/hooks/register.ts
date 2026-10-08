@@ -14,8 +14,8 @@ export const SOUNDS = {
   needsYou: 'Submarine',
 } as const
 
-/** afplay volume: 1 is full, 0.3 a soft chime. */
-export const VOLUME = 0.3
+/** afplay volume: 1 is full, 0.05 a whisper. */
+export const VOLUME = 0.05
 
 const basename = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path
 
