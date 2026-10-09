@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { bar, levelOf, stageOf } from '../hooks/register.ts'
+import { SPECIES, bar, levelOf, splitEmojis, stageOf, stagesOf } from '../hooks/register.ts'
 
 test('levels need 50, 150, 300 ... xp', async () => {
   expect(levelOf(0)).toEqual({ level: 1, into: 0, span: 50 })
@@ -19,4 +19,15 @@ test('the xp bar fills', async () => {
   expect(bar(0, 50)).toBe('▱▱▱▱▱▱')
   expect(bar(25, 50)).toBe('▰▰▰▱▱▱')
   expect(bar(60, 50)).toBe('▰▰▰▰▰▰')
+})
+
+test('species and your own emojis', async () => {
+  expect(stagesOf({})).toEqual(SPECIES.chick!.stages)
+  expect(stageOf(4, stagesOf({ species: 'cat' }))).toBe('😺')
+  expect(stagesOf({ custom: ['🦊'] })).toEqual(['🦊', '🦊', '🦊', '🦊', '🦊'])
+  expect(stagesOf({ custom: ['🥚', '🦊'] })).toEqual(['🥚', '🥚', '🥚', '🦊', '🦊'])
+  expect(stagesOf({ custom: ['1', '2', '3', '4', '5'] })).toEqual(['1', '2', '3', '4', '5'])
+  expect(stagesOf({ species: 'nope' })).toEqual(SPECIES.chick!.stages)
+  expect(splitEmojis('🦊 🐉')).toEqual(['🦊', '🐉'])
+  expect(splitEmojis('🦊🐉👨‍💻')).toEqual(['🦊', '🐉', '👨‍💻'])
 })

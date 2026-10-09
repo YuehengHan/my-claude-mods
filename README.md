@@ -7,7 +7,7 @@ Claude Code mods (function-hook plugins) for working across many repos and many 
 | **where-am-i** | A band above the prompt: `📁 repo  🌿 branch ↑2  ± 3 changed  🎯 task`. `/task <text>` names what this session is doing. |
 | **done-ping** | A macOS notification (repo, duration, your prompt) with a sound per kind: 🔔 Glass when a turn over 30 s is done, Basso when it failed, Submarine when Claude is waiting on you. Change them in `SOUNDS`. |
 | **repo-guard** | Blocks `push --force`, pushes to main/master, `reset --hard`, `clean -f`, `checkout .`, `branch -D`, `stash clear`, `rm -rf ~`. Asks before Claude first edits a repo other than the session's own. |
-| **claude-pet** | A pet that earns xp from your work, grows 🥚 → 🦅 and unlocks achievements. It stays out of the status line except for news (level up, achievement, streak, dizzy) — `/pet` anytime, `/pet name <name>`. |
+| **claude-pet** | A pet that earns xp from your work, grows through five stages and unlocks achievements. Pick a species (`/pet species`: chick, cat, dog, dragon, dino, ocean, bug, plant, robot, moon) or your own emojis (`/pet emoji 🦊`, `/pet emoji 🥚 🐣 🦊 🐺 🐉`). In the status line only for news; `/pet` anytime, `/pet name <name>`. |
 | **claude-mood** | Claude's mood beside the working spinner — `Creating notes.md… 🤔 在读代码 📖8 ✏️2` — gone when the turn ends. |
 | **control-tower** | `/tower` opens a pane listing every Claude session on this machine: ✋ waiting for you, ⏳ working, ✅ done, with its task and last answer. The status line tells you when *another* session needs you. |
 | **tldr** | A one-line `💡 TL;DR` under every long answer (Haiku), so a session you switch back to reads at a glance. |
