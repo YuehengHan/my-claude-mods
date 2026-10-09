@@ -49,7 +49,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'task',
-      description: "Name what this session is working on (shown above the prompt); empty clears it",
+      description: "Name this session's task: shown above the prompt and in /tower, so you know what each session is for; empty clears it",
       argumentHint: '[what this session is doing]',
       immediate: true,
     })
@@ -104,7 +104,7 @@ export const register: Register = on => {
             </Text>
           )}
           <Text dimColor={!current}>
-            {'  '}🎯 {current || '/task to name this session'}
+            {'  '}🎯 {current || '/task to name this task'}
           </Text>
         </Box>
         {rest}
