@@ -1,7 +1,7 @@
 {
   "name": "claude-pet",
-  "version": "0.2.0",
-  "description": "A pet in the status line that grows with your work, gets dizzy on errors, sleeps when you're away, and unlocks achievements",
+  "version": "0.3.0",
+  "description": "A pet that levels up with your work and unlocks achievements; it shows in the status line only when it has news (/pet anytime)",
   "author": {
     "name": "YuehengHan"
   }

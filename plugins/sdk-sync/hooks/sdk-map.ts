@@ -1,24 +1,39 @@
-// The SpatialReal SDK graph: which files are each repo's public API, and which
-// repos must follow when they change. Repos are named by their GitHub remote, so
-// worktrees (backend-ng-m1-transcript) and submodules (clients/web-sdk) resolve
-// to the repo they are a copy of.
+// The SpatialReal SDK graph for release checks: for each repo that ships
+// releases (v* tags), its public API and who must follow a release. Repos are
+// named by their GitHub remote and live under ~/<BASE_DIR>/<repo>.
+
+export const BASE_DIR = 'Desktop/SpatialReal'
+
+/**
+ * - parity: a sibling SDK that must offer the same API
+ * - docs: pages that document it
+ * - examples: sample apps that pin its version
+ * - consumer: a package that depends on it
+ * - release: a distribution repo republishing it
+ * - codegen: code generated or copied from it
+ */
+export type TargetKind = 'parity' | 'docs' | 'examples' | 'consumer' | 'release' | 'codegen'
 
 export type Target = {
   repo: string
-  /** Why this repo follows, in a few words. */
+  kind: TargetKind
+  /** What to verify there, in a few words. */
   why: string
-  /** Where to look in that repo. */
+  /** git pathspecs (glob) in that repo to look at. */
   paths: readonly string[]
+  /** A POSIX ERE (git grep -E: no \\s, use [[:space:]]) for the line pinning the version. */
+  pin?: string
+  /** Whether the released version string should appear in `paths`. */
+  mentionsVersion?: boolean
 }
 
 export type RepoSpec = {
   /** Public API, as globs relative to the repo root. */
   api: readonly string[]
-  /** Inside `api`, but not public. */
   exclude?: readonly string[]
-  /** Files in the repo itself to update alongside an API change. */
-  selfChecks: readonly string[]
-  /** One line the model reads about this repo's role. */
+  /** In the repo itself, where the version and changelog live. */
+  self: { version: string; changelog?: string }
+  /** One line the auditor reads about this repo's role. */
   note: string
   targets: readonly Target[]
 }
@@ -26,17 +41,12 @@ export type RepoSpec = {
 const ANDROID = 'sdk/src/main/java/ai/spatialreal/android'
 const IOS = 'Sources/SpatialRealSDK'
 
-const SHARED_DOCS: Target = {
+const sharedDocs = (sdk: string): Target => ({
   repo: 'spatialreal-docs',
-  why: 'cross-SDK pages',
-  paths: [
-    'resources/error-codes.mdx',
-    'resources/client-error.mdx',
-    'resources/migration-guide.mdx',
-    'overview/changelog.mdx',
-    'avatar-integration/host-mode/client.mdx',
-  ],
-}
+  kind: 'docs',
+  why: `cross-SDK pages still right for ${sdk}`,
+  paths: ['resources/error-codes.mdx', 'resources/client-error.mdx', 'resources/migration-guide.mdx', 'overview/changelog.mdx'],
+})
 
 export const SDK_MAP: Record<string, RepoSpec> = {
   'web-sdk': {
@@ -51,33 +61,27 @@ export const SDK_MAP: Record<string, RepoSpec> = {
       'vite.ts',
       'next.ts',
     ],
-    selfChecks: ['CHANGELOG.md', 'README.md', 'docs/public-api-design.md'],
-    note: 'Web SDK is the reference implementation; Android and iOS port its facade (docs/release-workflow.md: run the cross-SDK alignment check). Removed APIs must be kept and wrapped with deprecate() (utils/deprecation.ts).',
+    self: { version: 'package.json → version', changelog: 'CHANGELOG.md' },
+    note: 'Web SDK is the reference implementation; Android and iOS port its facade (release-workflow: run the cross-SDK alignment check; missing parity → implement or open tracked follow-ups). Removed APIs stay, wrapped with deprecate().',
     targets: [
-      { repo: 'android-sdk', why: 'facade port of Web', paths: [`${ANDROID}/facade/**`, `${ANDROID}/utils/Deprecation.kt`] },
-      { repo: 'ios-sdk', why: 'facade port of Web', paths: [`${IOS}/Facade/**`, `${IOS}/Utils/Deprecation.swift`] },
+      { repo: 'android-sdk', kind: 'parity', why: 'same facade API / semantics / error codes', paths: [`${ANDROID}/facade/**`, `${ANDROID}/*.kt`] },
+      { repo: 'ios-sdk', kind: 'parity', why: 'same facade API / semantics / error codes', paths: [`${IOS}/Facade/**`, `${IOS}/*.swift`] },
       {
         repo: 'spatialreal-docs',
-        why: 'Web SDK docs',
-        paths: [
-          'sdk-reference/web-sdk/api-reference.mdx',
-          'sdk-reference/web-sdk/changelog.mdx',
-          'avatar-integration/sdk-mode/web.mdx',
-          'avatar-integration/livekit/web-client.mdx',
-          'agent/quickstart.mdx',
-        ],
+        kind: 'docs',
+        why: 'Web API reference + changelog',
+        paths: ['sdk-reference/web-sdk/**', 'avatar-integration/sdk-mode/web.mdx', 'avatar-integration/livekit/web-client.mdx', 'agent/quickstart.mdx'],
+        mentionsVersion: true,
       },
-      SHARED_DOCS,
+      sharedDocs('Web'),
       {
         repo: 'spatialreal-examples',
-        why: 'Web samples',
-        paths: ['agent/web', 'avatar-integration/sdk-mode/web', 'avatar-integration/host-mode/client/web', 'avatar-integration/livekit/web-client'],
+        kind: 'examples',
+        why: 'web samples on the new version / API',
+        paths: ['agent/web/**', 'avatar-integration/sdk-mode/web/**', 'avatar-integration/host-mode/client/web/**', 'avatar-integration/livekit/web-client/**'],
+        pin: '"@spatialreal/web-sdk"[[:space:]]*:',
       },
-      {
-        repo: 'realtime_agent_framework',
-        why: 'consumes web-sdk as submodule',
-        paths: ['clients/web-sdk (bump)', 'app/web-client/src/spatial-web-avatar/use-spatial-web-avatar-host.ts', 'composer/src/server.ts'],
-      },
+      { repo: 'realtime_agent_framework', kind: 'consumer', why: 'clients/web-sdk submodule bumped', paths: ['clients/web-sdk', '.gitmodules'] },
     ],
   },
 
@@ -90,18 +94,20 @@ export const SDK_MAP: Record<string, RepoSpec> = {
       `${ANDROID}/performance/**`,
     ],
     exclude: [`${ANDROID}/facade/ContainerRegistry.kt`, `${ANDROID}/facade/chat/AndroidChatHost.kt`],
-    selfChecks: ['CHANGELOG.md', 'gradle.properties (SDK_VERSION_NAME / SDK_VERSION_CODE on release)'],
-    note: 'Android ports the Web facade; keep API shape, lifecycle/state semantics and error codes aligned with Web and iOS. A bugfix here means reviewing Web and iOS for the same class of issue.',
+    self: { version: 'gradle.properties → SDK_VERSION_NAME / SDK_VERSION_CODE', changelog: 'CHANGELOG.md' },
+    note: 'Android ports the Web facade; API shape, lifecycle/state semantics and error codes stay aligned with Web and iOS. A bugfix means reviewing Web and iOS for the same class of issue.',
     targets: [
-      { repo: 'web-sdk', why: 'reference impl: same change or parity check', paths: ['facade/**'] },
-      { repo: 'ios-sdk', why: 'sibling port', paths: [`${IOS}/Facade/**`] },
+      { repo: 'web-sdk', kind: 'parity', why: 'reference impl has the same API / fix', paths: ['facade/**', 'index.ts'] },
+      { repo: 'ios-sdk', kind: 'parity', why: 'sibling port has the same API / fix', paths: [`${IOS}/Facade/**`, `${IOS}/*.swift`] },
       {
         repo: 'spatialreal-docs',
-        why: 'Android SDK docs',
-        paths: ['sdk-reference/android-sdk/api-reference.mdx', 'sdk-reference/android-sdk/changelog.mdx', 'avatar-integration/sdk-mode/android.mdx', 'snippets/android-sdk-install.mdx'],
+        kind: 'docs',
+        why: 'Android API reference + changelog + install snippet',
+        paths: ['sdk-reference/android-sdk/**', 'avatar-integration/sdk-mode/android.mdx', 'snippets/android-sdk-install.mdx'],
+        mentionsVersion: true,
       },
-      SHARED_DOCS,
-      { repo: 'spatialreal-examples', why: 'Android samples', paths: ['*/android', 'gradle/libs.versions.toml'] },
+      sharedDocs('Android'),
+      { repo: 'spatialreal-examples', kind: 'examples', why: 'android samples on the new version', paths: ['**/libs.versions.toml'], pin: '^spatialreal[[:space:]]*=' },
     ],
   },
 
@@ -116,66 +122,81 @@ export const SDK_MAP: Record<string, RepoSpec> = {
       `${IOS}/Utils/Logger.swift`,
     ],
     exclude: [`${IOS}/Facade/Chat/DebugMic.swift`],
-    selfChecks: ['CHANGELOG.md ([Unreleased])', 'SpatialRealSDK.podspec (version on release)'],
+    self: { version: 'SpatialRealSDK.podspec → spec.version', changelog: 'CHANGELOG.md' },
     note: 'iOS ports the Web facade (CLAUDE.md: Web main is the reference; keep error codes, turn rules and close-code tables in step).',
     targets: [
-      { repo: 'web-sdk', why: 'reference impl: same change or parity check', paths: ['facade/**'] },
-      { repo: 'android-sdk', why: 'sibling port', paths: [`${ANDROID}/facade/**`] },
-      { repo: 'ios-sdk-release', why: 'on release: url + checksum + version', paths: ['Package.swift', 'SpatialRealSDK.podspec', 'README.md'] },
+      { repo: 'web-sdk', kind: 'parity', why: 'reference impl has the same API / fix', paths: ['facade/**', 'index.ts'] },
+      { repo: 'android-sdk', kind: 'parity', why: 'sibling port has the same API / fix', paths: [`${ANDROID}/facade/**`, `${ANDROID}/*.kt`] },
+      {
+        repo: 'ios-sdk-release',
+        kind: 'release',
+        why: 'binary republished: url + checksum + version in Package.swift, podspec, README',
+        paths: ['Package.swift', 'SpatialRealSDK.podspec', 'README.md'],
+        mentionsVersion: true,
+      },
       {
         repo: 'spatialreal-docs',
-        why: 'iOS SDK docs',
-        paths: ['sdk-reference/ios-sdk/api-reference.mdx', 'sdk-reference/ios-sdk/changelog.mdx', 'avatar-integration/sdk-mode/ios.mdx', 'snippets/ios-sdk-install.mdx'],
+        kind: 'docs',
+        why: 'iOS API reference + changelog + install snippet',
+        paths: ['sdk-reference/ios-sdk/**', 'avatar-integration/sdk-mode/ios.mdx', 'snippets/ios-sdk-install.mdx'],
+        mentionsVersion: true,
       },
-      SHARED_DOCS,
-      { repo: 'spatialreal-examples', why: 'iOS samples', paths: ['*/ios (project.pbxproj minimumVersion)'] },
+      sharedDocs('iOS'),
+      { repo: 'spatialreal-examples', kind: 'examples', why: 'iOS samples on the new version', paths: ['**/project.pbxproj'], pin: 'minimumVersion' },
     ],
   },
 
   'python-sdk': {
     api: ['spatialreal/{__init__,config,errors,events,logid,session,version}.py'],
-    selfChecks: ['spatialreal/version.py (__version__ on release)'],
-    note: 'Server-side host-mode SDK (PyPI spatialreal); livekit-plugins-spatialreal imports AvatarSession, LiveKitEgressConfig, Playback*, InterruptReason and new_avatar_session from it.',
+    self: { version: 'spatialreal/version.py → __version__' },
+    note: 'Server-side host-mode SDK (PyPI spatialreal). livekit-plugins-spatialreal imports AvatarSession, LiveKitEgressConfig, Playback*, InterruptReason, new_avatar_session from it.',
     targets: [
-      { repo: 'livekit-plugins-spatialreal', why: 'imports python-sdk', paths: ['livekit/plugins/spatialreal/avatar.py', 'pyproject.toml (spatialreal>= pin)'] },
-      { repo: 'spatialreal-docs', why: 'Python SDK docs', paths: ['sdk-reference/python-sdk/python-sdk.mdx', 'avatar-integration/host-mode/server.mdx', 'avatar-integration/errors-and-recovery.mdx'] },
-      { repo: 'spatialreal-examples', why: 'host-mode server sample', paths: ['avatar-integration/host-mode/server'] },
+      {
+        repo: 'livekit-plugins-spatialreal',
+        kind: 'consumer',
+        why: 'still compatible; pin raised if it needs the new API',
+        paths: ['livekit/plugins/spatialreal/**', 'pyproject.toml'],
+        pin: 'spatialreal[<>=~]',
+      },
+      {
+        repo: 'spatialreal-docs',
+        kind: 'docs',
+        why: 'Python SDK page + host-mode server guide',
+        paths: ['sdk-reference/python-sdk/**', 'avatar-integration/host-mode/server.mdx', 'avatar-integration/errors-and-recovery.mdx'],
+        mentionsVersion: true,
+      },
+      { repo: 'spatialreal-examples', kind: 'examples', why: 'host-mode server sample', paths: ['avatar-integration/host-mode/server/**'], pin: 'spatialreal[<>=~]' },
     ],
   },
 
   'livekit-plugins-spatialreal': {
     api: ['livekit/plugins/spatialreal/{__init__,avatar}.py'],
-    selfChecks: ['livekit/plugins/spatialreal/version.py (__version__ on release)'],
-    note: 'LiveKit Agents plugin (PyPI livekit-plugins-spatialreal).',
+    self: { version: 'livekit/plugins/spatialreal/version.py → __version__' },
+    note: 'LiveKit Agents plugin (PyPI livekit-plugins-spatialreal), built on python-sdk.',
     targets: [
-      { repo: 'spatialreal-docs', why: 'LiveKit agent docs', paths: ['avatar-integration/livekit/agent.mdx'] },
-      { repo: 'spatialreal-examples', why: 'LiveKit agent sample', paths: ['avatar-integration/livekit/agent'] },
-      { repo: 'playground-livekit-agent', why: 'uses AvatarSession', paths: ['agent.py', 'pyproject.toml'] },
+      { repo: 'spatialreal-docs', kind: 'docs', why: 'LiveKit agent guide', paths: ['avatar-integration/livekit/agent.mdx'], mentionsVersion: true },
+      {
+        repo: 'spatialreal-examples',
+        kind: 'examples',
+        why: 'LiveKit agent sample',
+        paths: ['avatar-integration/livekit/agent/**'],
+        pin: 'livekit-plugins-spatialreal[<>=~]',
+      },
+      { repo: 'playground-livekit-agent', kind: 'consumer', why: 'playground agent', paths: ['pyproject.toml', 'agent.py'], pin: 'livekit-plugins-spatialreal[<>=~]' },
     ],
   },
 
   'shared-proto': {
     api: ['**/*.proto'],
-    selfChecks: ['a new tag vX.Y.Z (delivery is a tag)', 'after cp/v1 changes: backend-ng hack/check-proto-sync.sh'],
-    note: 'The only place a contract is edited; delivery is a tag. web-sdk, python-sdk, backend-ng and inference-server regenerate from the tag automatically. android-sdk and ios-sdk do NOT: their proto code is hand-maintained and silently goes stale.',
+    self: { version: 'git tag (delivery is a tag)' },
+    note: 'The only place a contract is edited. web-sdk, python-sdk, backend-ng and inference-server regenerate from the tag automatically; android-sdk and ios-sdk do NOT (hand-maintained proto code that silently goes stale).',
     targets: [
-      { repo: 'android-sdk', why: 'MANUAL: hand-committed generated Java', paths: [`${ANDROID}/model/**`] },
-      { repo: 'ios-sdk', why: 'MANUAL: hand-patched Driving.pb.swift', paths: [`${IOS}/Services/Driving.pb.swift`] },
-      { repo: 'inference-server', why: 'Flame subset of driveningress/v2: re-sync', paths: ['proto/driveningress/v2', 'generated/'] },
-      { repo: 'backend-ng', why: 'auto codegen; cp/v1 needs check-proto-sync', paths: ['api/generated/', 'hack/check-proto-sync.sh'] },
-      { repo: 'web-sdk', why: 'auto codegen on tag', paths: ['proto/', 'generated/'] },
-      { repo: 'python-sdk', why: 'auto codegen on tag', paths: ['proto/', 'spatialreal/proto/generated/'] },
-    ],
-  },
-
-  SPAvatarCore: {
-    api: ['Core/include/**', 'Package.swift'],
-    selfChecks: ['SPAvatarCore.podspec (version)', 'API_DOCUMENTATION.md'],
-    note: 'The C core every client SDK embeds; binaries are copied by hand.',
-    targets: [
-      { repo: 'web-sdk', why: 'wasm/ from scripts/build_wasm.sh', paths: ['wasm/avatar_core_wasm.{js,wasm}'] },
-      { repo: 'android-sdk', why: 'jniLibs from packaging/build_android.sh', paths: ['sdk/src/main/jniLibs/arm64-v8a/libavatar_core.so'] },
-      { repo: 'ios-sdk', why: 'SwiftPM avatar-core dependency', paths: ['Package.swift'] },
+      { repo: 'android-sdk', kind: 'codegen', why: 'MANUAL: hand-committed generated Java', paths: [`${ANDROID}/model/**`] },
+      { repo: 'ios-sdk', kind: 'codegen', why: 'MANUAL: hand-patched Driving.pb.swift', paths: [`${IOS}/Services/Driving.pb.swift`] },
+      { repo: 'web-sdk', kind: 'codegen', why: 'codegen PR from the tag merged', paths: ['proto/**', 'generated/**'] },
+      { repo: 'python-sdk', kind: 'codegen', why: 'codegen PR merged (proto/SHARED_PROTO_COMMIT)', paths: ['proto/**', 'spatialreal/proto/generated/**'] },
+      { repo: 'backend-ng', kind: 'codegen', why: 'codegen merged; cp/v1 → hack/check-proto-sync.sh', paths: ['api/generated/**'] },
+      { repo: 'inference-server', kind: 'codegen', why: 'Flame subset of driveningress/v2 re-synced', paths: ['proto/**', 'generated/**'] },
     ],
   },
 }
@@ -219,4 +240,23 @@ export function isPublicApi(repo: string, relPath: string): boolean {
 /** `git@github.com:SpatialReal-ai/web-sdk.git` → `web-sdk`. */
 export function repoFromRemote(url: string): string {
   return url.trim().replace(/\.git$/, '').split(/[/:]/).pop() ?? ''
+}
+
+/** Release tags only: v1.2.3, v1.0.0-beta.3, v1.0.0-beta3; not facade-pre-rebase. */
+export function isReleaseTag(tag: string): boolean {
+  return /^v\d+\.\d+/.test(tag)
+}
+
+/** v1.0.0-beta.3 → 1.0.0-beta.3, the form changelogs and pins use. */
+export function bareVersion(tag: string): string {
+  return tag.replace(/^v/, '')
+}
+
+/** A version as a whole word: 1.0.0-beta3 is not in 1.0.0-beta39. */
+export function versionPattern(version: string): string {
+  return `${version.replace(/[.+^$()|[\]\\*?{}]/g, '\\$&')}([^0-9A-Za-z.]|$)`
+}
+
+export function mentions(text: string, version: string): boolean {
+  return new RegExp(versionPattern(version), 'm').test(text)
 }

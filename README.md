@@ -7,12 +7,12 @@ Claude Code mods (function-hook plugins) for working across many repos and many 
 | **where-am-i** | A band above the prompt: `📁 repo  🌿 branch ↑2  ± 3 changed  🎯 task`. `/task <text>` names what this session is doing. |
 | **done-ping** | A macOS notification (repo, duration, your prompt) with a sound per kind: 🔔 Glass when a turn over 30 s is done, Basso when it failed, Submarine when Claude is waiting on you. Change them in `SOUNDS`. |
 | **repo-guard** | Blocks `push --force`, pushes to main/master, `reset --hard`, `clean -f`, `checkout .`, `branch -D`, `stash clear`, `rm -rf ~`. Asks before Claude first edits a repo other than the session's own. |
-| **claude-pet** | A status-line pet that earns xp from your work, grows 🥚 → 🦅, gets dizzy on errors, sleeps when you're away, and unlocks achievements. Hero plays on a level up. `/pet`, `/pet name <name>`. |
-| **claude-mood** | Claude's mood in the status line: 🤔 reading, ✍️ writing, 🧪 testing, 😤 after a few errors, 😌 when done — with 📖 ✏️ ⚡ 💥 counters. |
+| **claude-pet** | A pet that earns xp from your work, grows 🥚 → 🦅 and unlocks achievements. It stays out of the status line except for news (level up, achievement, streak, dizzy) — `/pet` anytime, `/pet name <name>`. |
+| **claude-mood** | Claude's mood beside the working spinner — `Creating notes.md… 🤔 在读代码 📖8 ✏️2` — gone when the turn ends. |
 | **control-tower** | `/tower` opens a pane listing every Claude session on this machine: ✋ waiting for you, ⏳ working, ✅ done, with its task and last answer. The status line tells you when *another* session needs you. |
 | **tldr** | A one-line `💡 TL;DR` under every long answer (Haiku), so a session you switch back to reads at a glance. |
-| **sdk-sync** | Knows the SpatialReal SDK graph (web/android/ios/python SDKs, shared-proto, SPAvatarCore, livekit plugin, docs, examples). When Claude edits a public API it is told which repos follow and ends with an "SDK sync" checklist; the change (diff + Haiku summary) is handed to sessions in those repos: `/sync`, `/sync apply <id>`, `/sync done <id>`, `/sync check`. Edit the graph in `plugins/sdk-sync/hooks/sdk-map.ts`. |
-| **fortune** | Programmer jokes rotate in the status line while Claude works; the day's first prompt shows 今日运势 (`/fortune`). Fridays never deploy. |
+| **sdk-sync** | Release audit for the SpatialReal SDKs. Never acts while you work: when a new `v*` tag appears it reminds you once; `/release-check <repo> [tag]` gathers the facts (public API files changed, CHANGELOG entry, commits in each sibling SDK / docs / examples since the release, version pins) and asks Claude for a read-only audit table. `/release-check status` lists unchecked releases; `--facts` skips the audit. Graph: `plugins/sdk-sync/hooks/sdk-map.ts`. |
+| **fortune** | Programmer jokes in place of the spinner's random verb while Claude works (the desktop's step names are kept); the day's first prompt shows 今日运势 (`/fortune`). Fridays never deploy. |
 
 ## Install
 

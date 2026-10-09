@@ -94,9 +94,20 @@ async function today($: EngineInterface): Promise<{ day: string; weekday: number
   return { day: `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`, weekday: d.getDay() }
 }
 
+const JOKE = { plugin: 'fortune', key: 'joke' } as const
+
 async function joke($: EngineInterface) {
   const n = Math.floor((await $.clock.now()) / 10_000)
-  $.ui.status(`🎲 ${JOKES[hash(String(n)) % JOKES.length]}`)
+  await $.state.set(JOKE, `🎲 ${JOKES[hash(String(n)) % JOKES.length]}`)
+}
+
+/**
+ * The terminal's spinner word is a random verb (Sauteing): a joke loses nothing.
+ * The desktop's names the step (Creating notes.md): keep it unless it is bare.
+ */
+export function replacesWord(surface: string, word: string, mode: string): boolean {
+  if (surface === 'terminal') return true
+  return surface === 'desktop' && (word === 'Working' || mode === 'thinking' || mode === 'requesting')
 }
 
 export const register: Register = on => {
@@ -129,8 +140,14 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       rotation?.cancel()
       rotation = null
-      $.ui.status(undefined)
+      await $.state.set(JOKE, '')
     }
     return next(e)
+  })
+
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    const { value: line = '' } = await $.state.get(JOKE)
+    if (line === '' || !replacesWord(e.surface, e.props.word, e.props.mode)) return next(e)
+    return next({ ...e, props: { ...e.props, word: line } })
   })
 }

@@ -25,12 +25,12 @@
     {
       "name": "claude-pet",
       "source": "./plugins/claude-pet",
-      "description": "A status-line pet that levels up with your work and unlocks achievements"
+      "description": "A pet that levels up with your work; in the status line only when it has news"
     },
     {
       "name": "claude-mood",
       "source": "./plugins/claude-mood",
-      "description": "Claude's mood in the status line, from what the turn has read, written and broken"
+      "description": "Claude's mood beside the working spinner"
     },
     {
       "name": "control-tower",
@@ -45,12 +45,12 @@
     {
       "name": "sdk-sync",
       "source": "./plugins/sdk-sync",
-      "description": "SpatialReal SDK graph: flags public API edits, names the SDKs/docs/examples to follow, hands the change to their sessions (/sync)"
+      "description": "After an SDK release: /release-check audits sibling SDKs, docs and examples (read-only)"
     },
     {
       "name": "fortune",
       "source": "./plugins/fortune",
-      "description": "Programmer jokes in the status line while Claude works, and a daily /fortune"
+      "description": "Programmer jokes in the working spinner, and a daily /fortune"
     }
   ]
 }

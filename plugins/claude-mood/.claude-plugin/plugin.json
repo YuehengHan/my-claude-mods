@@ -1,8 +1,9 @@
 {
   "name": "claude-mood",
-  "version": "0.1.0",
-  "description": "Claude's mood in the status line, from what this turn has read, written and broken",
+  "version": "0.2.0",
+  "description": "Claude's mood beside the working spinner, from what the turn has read, written and broken",
   "author": {
     "name": "YuehengHan"
-  }
+  },
+  "types": "./types/index.d.ts"
 }

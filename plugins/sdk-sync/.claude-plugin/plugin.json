@@ -1,6 +1,8 @@
 {
   "name": "sdk-sync",
-  "version": "0.1.0",
-  "description": "Knows the SpatialReal SDK graph: when Claude edits a public API it names the sibling SDKs, docs and examples to follow, and hands the change to sessions in those repos (/sync)",
-  "author": { "name": "YuehengHan" }
+  "version": "0.2.0",
+  "description": "After an SDK release (v* tag): /release-check gathers what changed and asks Claude for a read-only audit of the sibling SDKs, docs and examples. Never acts while you work.",
+  "author": {
+    "name": "YuehengHan"
+  }
 }
