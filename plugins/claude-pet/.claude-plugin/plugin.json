@@ -1,6 +1,6 @@
 {
   "name": "claude-pet",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A pet in the status line that levels up with your work, gets dizzy on errors, sleeps when you're away, and unlocks achievements",
   "author": {
     "name": "YuehengHan"

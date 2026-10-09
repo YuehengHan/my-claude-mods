@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { SPECIES, bar, levelOf, splitEmojis, stageOf, stagesOf } from '../hooks/register.ts'
+import { FACES, SPECIES, bar, isNight, levelOf, moodForTool, splitEmojis, stageOf, stagesOf } from '../hooks/register.ts'
 
 test('levels need 50, 150, 300 ... xp', async () => {
   expect(levelOf(0)).toEqual({ level: 1, into: 0, span: 50 })
@@ -30,4 +30,18 @@ test('species and your own emojis', async () => {
   expect(stagesOf({ species: 'nope' })).toEqual(SPECIES.chick!.stages)
   expect(splitEmojis('🦊 🐉')).toEqual(['🦊', '🐉'])
   expect(splitEmojis('🦊🐉👨‍💻')).toEqual(['🦊', '🐉', '👨‍💻'])
+})
+
+test('moods follow what Claude is doing', async () => {
+  expect(moodForTool('Read')).toBe('reading')
+  expect(moodForTool('Grep')).toBe('reading')
+  expect(moodForTool('Edit')).toBe('writing')
+  expect(moodForTool('Bash', 'pnpm test')).toBe('testing')
+  expect(moodForTool('Bash', 'ls -la')).toBe('running')
+  expect(moodForTool('Agent')).toBe('delegating')
+  expect(moodForTool('WebFetch')).toBe('browsing')
+  expect(moodForTool('mcp__claude-in-chrome__navigate')).toBe('browsing')
+  expect(isNight(3)).toBe(true)
+  expect(isNight(13)).toBe(false)
+  expect(Object.keys(FACES).length).toBe(18)
 })

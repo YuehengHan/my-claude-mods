@@ -9,18 +9,66 @@ export type Pet = {
   /** Your own emojis: one for every stage, or one per stage in order. */
   custom?: string[]
 }
-type Mood = 'idle' | 'busy' | 'happy' | 'dizzy' | 'party' | 'asleep'
+export type Mood =
+  | 'idle'
+  | 'thinking'
+  | 'reading'
+  | 'writing'
+  | 'running'
+  | 'testing'
+  | 'browsing'
+  | 'delegating'
+  | 'waiting'
+  | 'fired'
+  | 'yawning'
+  | 'happy'
+  | 'party'
+  | 'proud'
+  | 'dizzy'
+  | 'angry'
+  | 'bored'
+  | 'asleep'
 
 const KEY = 'pet'
+const BORED_AFTER_MS = 5 * 60_000
 const SLEEP_AFTER_MS = 15 * 60_000
 
-const FACES: Record<Mood, string> = {
+export const FACES: Record<Mood, string> = {
   idle: '(・ω・)',
-  busy: '(•̀ᴗ•́)و',
+  thinking: '(￣～￣)💭',
+  reading: '(・_・)📖',
+  writing: '(｀・ω・´)✍️',
+  running: '(•̀ᴗ•́)و⚡',
+  testing: '(°□°;)🧪',
+  browsing: '(⊙_⊙)🌐',
+  delegating: '٩(◕‿◕)۶📣',
+  waiting: '(・・?)✋',
+  fired: '(ง •̀_•́)ง🔥',
+  yawning: '(－o－)🌙',
   happy: '(^ω^)',
+  party: '＼(^o^)／🎉',
+  proud: '(๑•̀ㅂ•́)و📦',
   dizzy: '(×_×)',
-  party: '＼(^o^)／',
+  angry: '(╬ಠ益ಠ)',
+  bored: '(￣ヘ￣)',
   asleep: '(-_-) zZ',
+}
+
+const READ_TOOLS: readonly string[] = ['Read', 'Grep', 'Glob', 'LS', 'NotebookRead']
+const WRITE_TOOLS: readonly string[] = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+
+/** What the pet does while a tool runs. */
+export function moodForTool(tool: string, command = ''): Mood {
+  if (READ_TOOLS.includes(tool)) return 'reading'
+  if (WRITE_TOOLS.includes(tool)) return 'writing'
+  if (tool === 'Agent' || tool === 'Task') return 'delegating'
+  if (tool === 'WebFetch' || tool === 'WebSearch' || /browser|chrome/i.test(tool)) return 'browsing'
+  if (tool === 'Bash') return isTestCommand(command) ? 'testing' : 'running'
+  return 'running'
+}
+
+export function isNight(hour: number): boolean {
+  return hour >= 1 && hour < 5
 }
 
 export const ACHIEVEMENTS: Record<string, string> = {
@@ -85,14 +133,16 @@ export function bar(into: number, span: number, width = 6): string {
   return '▰'.repeat(full) + '▱'.repeat(width - full)
 }
 
-const isTestCommand = (c: string) =>
-  /\b(test|tests|pytest|jest|vitest|mocha|gradle\w*\s+\S*test|go\s+test|cargo\s+test|xcodebuild\s+test)\b/.test(c)
+function isTestCommand(c: string): boolean {
+  return /\b(test|tests|pytest|jest|vitest|mocha|gradle\w*\s+\S*test|go\s+test|cargo\s+test|xcodebuild\s+test)\b/.test(c)
+}
 
 let pet: Pet = { name: 'Mochi', xp: 0, achievements: [] }
 let mood: Mood = 'idle'
 let streak = 0
 let lastActive = 0
 let testsFailedLast = false
+let errorRun = 0
 
 async function load($: EngineInterface): Promise<Pet> {
   const stored = (await $.store.get(KEY)) as Partial<Pet> | undefined
@@ -144,8 +194,10 @@ export const register: Register = on => {
     })
     $.clock.every(60_000, () => {
       void $.clock.now().then(now => {
-        if (mood !== 'asleep' && now - lastActive > SLEEP_AFTER_MS) {
-          mood = 'asleep'
+        const quiet = now - lastActive
+        const resting: Mood | null = quiet > SLEEP_AFTER_MS ? 'asleep' : quiet > BORED_AFTER_MS ? 'bored' : null
+        if (resting !== null && resting !== mood) {
+          mood = resting
           draw($)
         }
       })
@@ -155,27 +207,33 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
-    const wasAsleep = mood === 'asleep'
     lastActive = now
-    mood = wasAsleep ? 'happy' : 'busy'
+    const night = isNight(new Date(now).getHours())
+    mood = night ? 'yawning' : 'thinking'
     draw($)
-    const hour = new Date(now).getHours()
-    if (hour >= 1 && hour < 5) void gain($, 0, ['owl'])
+    if (night) void gain($, 0, ['owl'])
     return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
+    const command = e.tool === 'Bash' ? e.command : ''
+    if (e.agentId === undefined) {
+      mood = moodForTool(String(e.tool), command)
+      draw($)
+    }
     const ran = await next(e)
     if (e.agentId !== undefined || ran.deny !== undefined) return ran
     lastActive = await $.clock.now()
 
     if (ran.isError) {
       streak = 0
-      if (e.tool === 'Bash' && isTestCommand(e.command)) testsFailedLast = true
-      mood = 'dizzy'
+      errorRun += 1
+      if (isTestCommand(command)) testsFailedLast = true
+      mood = errorRun >= 3 ? 'angry' : 'dizzy'
       draw($)
       return ran
     }
+    errorRun = 0
 
     streak += 1
     const unlock = ['hello']
@@ -188,12 +246,13 @@ export const register: Register = on => {
       if (testsFailedLast) unlock.push('phoenix')
       testsFailedLast = false
       mood = 'party'
-    } else if (e.tool === 'Bash' && /\bgit\s+commit\b/.test(e.command)) {
+    } else if (/\bgit\s+(commit|push)\b/.test(command)) {
       xp += 5
-      unlock.push('shipper')
-      mood = 'happy'
+      if (/\bgit\s+commit\b/.test(command)) unlock.push('shipper')
+      mood = 'proud'
     } else {
-      mood = 'busy'
+      // Between tools Claude is thinking again; a long clean run fires the pet up.
+      mood = streak >= 25 ? 'fired' : 'thinking'
     }
     void gain($, xp, unlock)
     draw($)
@@ -204,9 +263,18 @@ export const register: Register = on => {
     const done = await next(e)
     if (e.agentId !== undefined || e.isAborted) return done
     void gain($, 3, e.durationMs > 10 * 60_000 ? ['marathon'] : [])
-    mood = e.reason === 'answer' ? (mood === 'dizzy' ? 'idle' : 'happy') : 'dizzy'
+    mood = e.reason !== 'answer' ? 'dizzy' : errorRun > 0 ? 'idle' : mood === 'party' || mood === 'proud' ? mood : 'happy'
     draw($)
     return done
+  })
+
+  on('classic.Notification', async ($, e, next) => {
+    const ran = await next(e)
+    if (e.notification_type === 'permission_prompt' || e.notification_type === 'elicitation_dialog') {
+      mood = 'waiting'
+      draw($)
+    }
+    return ran
   })
 
   on('command.run', { command: 'pet' }, async ($, e) => {
