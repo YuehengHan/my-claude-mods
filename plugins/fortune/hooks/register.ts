@@ -96,15 +96,77 @@ async function today($: EngineInterface): Promise<{ day: string; weekday: number
 
 const JOKE = { plugin: 'fortune', key: 'joke' } as const
 
+/** Today's jokes for this repo, written by Haiku; the built-in ones until they arrive. */
+let jokes: readonly string[] = JOKES
+let generating = false
+
+/** One joke per line from the model → a clean list; too few means use the built-ins. */
+export function parseJokes(text: string): string[] {
+  const lines = text
+    .split('\n')
+    .map(l => l.replace(/^\s*(?:[-*•]|\d+[.)、])\s*/, '').replace(/^["'“「]|["'”」]$/g, '').trim())
+    .filter(l => l.length >= 4 && l.length <= 70)
+  return [...new Set(lines)].slice(0, 30)
+}
+
+async function repoInfo($: EngineInterface): Promise<{ repo: string; files: string }> {
+  const cwd = await $.session.cwd()
+  const r = await $.process.run(['git', 'remote', 'get-url', 'origin'], { timeoutMs: 5000 }).catch(() => null)
+  const remote = r !== null && r.exitCode === 0 ? r.stdout.trim() : ''
+  const repo = remote.replace(/\.git$/, '').split(/[/:]/).pop() || cwd.split('/').pop() || 'code'
+  const entries = await $.fs.list(cwd).catch(() => [])
+  return { repo, files: entries.map(f => f.name).filter(n => !n.startsWith('.')).slice(0, 40).join(', ') }
+}
+
+/** Loads today's jokes for this repo, writing them with Haiku the first time any session asks. */
+async function loadJokes($: EngineInterface) {
+  if (generating) return
+  generating = true
+  try {
+    const { day } = await today($)
+    const { repo, files } = await repoInfo($)
+    const key = `jokes:${day}:${repo}`
+    const cached = (await $.store.get(key)) as string[] | undefined
+    if (cached && cached.length >= 5) {
+      jokes = cached
+      return
+    }
+    const r = await $.model.complete({
+      model: 'haiku',
+      system:
+        '你给程序员写冷笑话，显示在 AI 编程助手干活时的转圈提示后面。' +
+        '每行一条，共 20 条，每条不超过 35 个字，中文为主，可以夹英文术语。' +
+        '要贴合这个仓库的技术栈和日常（构建、依赖、调试、发版、code review、AI 写代码），好笑但不刻薄，不要重复梗。' +
+        '只输出笑话本身：不要编号、不要引号、不要解释。',
+      prompt: `仓库：${repo}\n顶层文件：${files}\n日期：${day}`,
+      maxTokens: 1500,
+      timeoutMs: 30_000,
+    })
+    const fresh = r.isAnswered ? parseJokes(r.text) : []
+    if (fresh.length < 5) return
+    jokes = fresh
+    await $.store.set(key, fresh)
+    // Yesterday's batches are no use: keep the store small.
+    for (const k of await $.store.keys()) {
+      if (k.startsWith('jokes:') && !k.startsWith(`jokes:${day}:`)) await $.store.delete(k)
+    }
+  } catch {
+    // The built-in jokes stand.
+  } finally {
+    generating = false
+  }
+}
+
 async function joke($: EngineInterface) {
   const n = Math.floor((await $.clock.now()) / 10_000)
-  await $.state.set(JOKE, `🎲 ${JOKES[hash(String(n)) % JOKES.length]}`)
+  await $.state.set(JOKE, `🎲 ${jokes[hash(String(n)) % jokes.length]}`)
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'fortune', description: '🔮 Today\'s coding fortune', immediate: true })
     lastFortuneDay = String((await $.store.get('lastFortuneDay')) ?? '')
+    void loadJokes($)
     return next(e)
   })
 
@@ -121,6 +183,8 @@ export const register: Register = on => {
       await $.store.set('lastFortuneDay', day)
       $.ui.toast(formatFortune(fortuneOf(day, weekday)), { timeoutMs: 10_000 })
     }
+    // A session left open past midnight picks up the new day's batch.
+    void loadJokes($)
     rotation?.cancel()
     void joke($)
     rotation = $.clock.every(10_000, () => void joke($))
