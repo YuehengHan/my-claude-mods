@@ -79,6 +79,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const { value: info = null } = await $.state.get(REPO)
     if (e.props.hasSurvey || info === null) return next(e)
+    // Other mods' rows (control-tower) go beneath this one.
+    const rest = await next(e)
     const { value: current = '' } = await $.state.get(TASK)
     const { Box, Text } = $.ui.resolve(e)
 
@@ -86,23 +88,26 @@ export const register: Register = on => {
       (info.ahead ? ` ↑${info.ahead}` : '') + (info.behind ? ` ↓${info.behind}` : '')
 
     return (
-      <Box flexDirection="row" flexWrap="wrap">
-        <Text bold color="claude">📁 {info.name}</Text>
-        {info.branch !== null && (
-          <Text color={info.branch === 'main' || info.branch === 'master' ? 'warning' : 'suggestion'}>
-            {'  '}🌿 {info.branch}
-            {sync}
+      <Box flexDirection="column">
+        <Box flexDirection="row" flexWrap="wrap">
+          <Text bold color="claude">📁 {info.name}</Text>
+          {info.branch !== null && (
+            <Text color={info.branch === 'main' || info.branch === 'master' ? 'warning' : 'suggestion'}>
+              {'  '}🌿 {info.branch}
+              {sync}
+            </Text>
+          )}
+          {info.branch !== null && (
+            <Text color={info.dirty ? 'warning' : 'success'}>
+              {'  '}
+              {info.dirty ? `± ${info.dirty} changed` : '✓ clean'}
+            </Text>
+          )}
+          <Text dimColor={!current}>
+            {'  '}🎯 {current || '/task to name this session'}
           </Text>
-        )}
-        {info.branch !== null && (
-          <Text color={info.dirty ? 'warning' : 'success'}>
-            {'  '}
-            {info.dirty ? `± ${info.dirty} changed` : '✓ clean'}
-          </Text>
-        )}
-        <Text dimColor={!current}>
-          {'  '}🎯 {current || '/task to name this session'}
-        </Text>
+        </Box>
+        {rest}
       </Box>
     )
   })

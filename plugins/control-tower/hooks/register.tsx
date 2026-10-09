@@ -11,8 +11,6 @@ const NOW = { plugin: 'control-tower', key: 'now' } as const
 const GONE_AFTER_MS = 90_000
 const BEAT_MS = 15_000
 const SCAN_MS = 5_000
-/** Others' finished turns stay in the status line this long. */
-const FRESH_DONE_MS = 3 * 60_000
 
 export const ORDER: Record<TowerState, number> = { waiting: 0, failed: 1, working: 2, done: 3, idle: 4, ended: 5 }
 
@@ -44,16 +42,13 @@ export function arrange(entries: readonly TowerEntry[], now: number): TowerEntry
     .sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.since - a.since)
 }
 
-/** The status line: only what another session needs you to know. */
-export function headline(entries: readonly TowerEntry[], self: string, now: number): string | undefined {
-  const others = arrange(entries, now).filter(s => s.id !== self)
-  const waiting = others.filter(s => s.state === 'waiting').map(s => s.repo)
-  if (waiting.length) return `🗼 ✋ ${waiting.join(', ')} 在等你`
-  const failed = others.filter(s => s.state === 'failed' && now - s.since < FRESH_DONE_MS).map(s => s.repo)
-  if (failed.length) return `🗼 ❌ ${failed.join(', ')} 出错了`
-  const done = others.filter(s => s.state === 'done' && now - s.since < FRESH_DONE_MS).map(s => s.repo)
-  if (done.length) return `🗼 ✅ ${done.join(', ')} 完成了`
-  return undefined
+export type BannerItem = { repo: string; age: string }
+
+/** The banner: only the other sessions waiting for you (a permission or a question). */
+export function bannerOf(entries: readonly TowerEntry[], self: string, now: number): BannerItem[] {
+  return arrange(entries, now)
+    .filter(s => s.id !== self && s.state === 'waiting')
+    .map(s => ({ repo: s.repo, age: ago(now - s.since) }))
 }
 
 let me: TowerEntry | null = null
@@ -113,7 +108,6 @@ async function scan($: EngineInterface) {
   }
   await $.state.set(SESSIONS, arrange(found, now))
   await $.state.set(NOW, now)
-  $.ui.status(headline(found, me?.id ?? '', now))
 }
 
 function safely(work: Promise<unknown>) {
@@ -172,6 +166,32 @@ export const register: Register = on => {
   on('classic.SessionEnd', async ($, e, next) => {
     await safely(save($, { state: 'ended' }))
     return next(e)
+  })
+
+  // A row under where-am-i's, only while another session waits for you.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const rest = await next(e)
+    if (e.props.hasSurvey) return rest
+    const { value: sessions = [] } = await $.state.get(SESSIONS)
+    const { value: self = '' } = await $.state.get(SELF)
+    const { value: now = 0 } = await $.state.get(NOW)
+    const waiting = bannerOf(sessions, self, now)
+    if (waiting.length === 0) return rest
+    const { Box, Text, Button } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {rest}
+        <Box flexDirection="row" flexWrap="wrap">
+          {waiting.map(it => (
+            <Text color="warning" bold>
+              ✋ {it.repo} 在等你 {it.age}
+              {'   '}
+            </Text>
+          ))}
+          <Button key="tower" label="tower" plain onPress={() => $.ui.open({ id: PANE, title: '🗼 Control tower' })} />
+        </Box>
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
