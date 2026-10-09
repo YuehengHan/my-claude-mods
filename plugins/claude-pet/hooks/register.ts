@@ -105,14 +105,10 @@ async function load($: EngineInterface): Promise<Pet> {
   }
 }
 
-let hideTimer: { cancel: () => void } | null = null
-
-/** The pet keeps out of the status line except for news, shown for `ms`. */
-function flash($: EngineInterface, ms = 20_000) {
+/** The pet lives in the status line; every change of mood or xp redraws it. */
+function draw($: EngineInterface) {
   const { level, into, span } = levelOf(pet.xp)
   $.ui.status(`${stageOf(level, stagesOf(pet))} ${pet.name} ${FACES[mood]}  Lv${level} ${bar(into, span)}${streak >= 5 ? `  🔥${streak}` : ''}`)
-  hideTimer?.cancel()
-  hideTimer = $.clock.after(ms, () => $.ui.status(undefined))
 }
 
 // Re-read before writing so several sessions feeding the same pet don't lose xp.
@@ -132,13 +128,14 @@ async function gain($: EngineInterface, xp: number, unlock: string[] = []) {
     void $.process.run(['afplay', '-v', '0.05', '/System/Library/Sounds/Hero.aiff'], { timeoutMs: 10_000 }).catch(() => undefined)
     mood = 'party'
   }
-  if (newOnes.length > 0 || after > before) flash($)
+  draw($)
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     pet = await load($)
     lastActive = await $.clock.now()
+    draw($)
     await $.command.register({
       name: 'pet',
       description: 'Your pet: stats and achievements; rename it, pick a species or your own emojis',
@@ -147,7 +144,10 @@ export const register: Register = on => {
     })
     $.clock.every(60_000, () => {
       void $.clock.now().then(now => {
-        if (mood !== 'asleep' && now - lastActive > SLEEP_AFTER_MS) mood = 'asleep'
+        if (mood !== 'asleep' && now - lastActive > SLEEP_AFTER_MS) {
+          mood = 'asleep'
+          draw($)
+        }
       })
     })
     return next(e)
@@ -157,11 +157,8 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const wasAsleep = mood === 'asleep'
     lastActive = now
-    mood = 'busy'
-    if (wasAsleep) {
-      mood = 'happy'
-      flash($, 8000)
-    }
+    mood = wasAsleep ? 'happy' : 'busy'
+    draw($)
     const hour = new Date(now).getHours()
     if (hour >= 1 && hour < 5) void gain($, 0, ['owl'])
     return next(e)
@@ -176,7 +173,7 @@ export const register: Register = on => {
       streak = 0
       if (e.tool === 'Bash' && isTestCommand(e.command)) testsFailedLast = true
       mood = 'dizzy'
-      flash($, 8000)
+      draw($)
       return ran
     }
 
@@ -199,7 +196,7 @@ export const register: Register = on => {
       mood = 'busy'
     }
     void gain($, xp, unlock)
-    if ([10, 25, 50, 100].includes(streak)) flash($, 10_000)
+    draw($)
     return ran
   })
 
@@ -208,6 +205,7 @@ export const register: Register = on => {
     if (e.agentId !== undefined || e.isAborted) return done
     void gain($, 3, e.durationMs > 10 * 60_000 ? ['marathon'] : [])
     mood = e.reason === 'answer' ? (mood === 'dizzy' ? 'idle' : 'happy') : 'dizzy'
+    draw($)
     return done
   })
 
@@ -217,7 +215,7 @@ export const register: Register = on => {
     const save = async (next: Pet, text: string) => {
       pet = next
       await $.store.set(KEY, pet)
-      flash($, 8000)
+      draw($)
       return { text }
     }
 
