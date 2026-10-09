@@ -1,6 +1,6 @@
 {
   "name": "fortune",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Programmer jokes after the working spinner, and a daily fortune (/fortune) — 今日宜重构，忌周五上线",
   "author": {
     "name": "YuehengHan"

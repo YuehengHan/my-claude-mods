@@ -98,7 +98,9 @@ const JOKE = { plugin: 'fortune', key: 'joke' } as const
 
 /** Today's jokes for this repo, written by Haiku; the built-in ones until they arrive. */
 let jokes: readonly string[] = JOKES
-let generating = false
+let generating: Promise<void> | null = null
+/** Where today's jokes came from, for /fortune. */
+let jokeSource = '内置笑话（还没生成）'
 
 /** One joke per line from the model → a clean list; too few means use the built-ins. */
 export function parseJokes(text: string): string[] {
@@ -119,9 +121,14 @@ async function repoInfo($: EngineInterface): Promise<{ repo: string; files: stri
 }
 
 /** Loads today's jokes for this repo, writing them with Haiku the first time any session asks. */
-async function loadJokes($: EngineInterface) {
-  if (generating) return
-  generating = true
+function loadJokes($: EngineInterface): Promise<void> {
+  generating ??= writeJokes($).finally(() => {
+    generating = null
+  })
+  return generating
+}
+
+async function writeJokes($: EngineInterface) {
   try {
     const { day } = await today($)
     const { repo, files } = await repoInfo($)
@@ -129,6 +136,7 @@ async function loadJokes($: EngineInterface) {
     const cached = (await $.store.get(key)) as string[] | undefined
     if (cached && cached.length >= 5) {
       jokes = cached
+      jokeSource = `${repo} · Haiku 今天编的 ${cached.length} 条`
       return
     }
     const r = await $.model.complete({
@@ -142,18 +150,24 @@ async function loadJokes($: EngineInterface) {
       maxTokens: 1500,
       timeoutMs: 30_000,
     })
-    const fresh = r.isAnswered ? parseJokes(r.text) : []
-    if (fresh.length < 5) return
+    if (!r.isAnswered) {
+      jokeSource = `内置笑话（Haiku 没回：${r.reason}${'status' in r && r.status ? ` ${r.status}` : ''}）`
+      return
+    }
+    const fresh = parseJokes(r.text)
+    if (fresh.length < 5) {
+      jokeSource = `内置笑话（Haiku 只给了 ${fresh.length} 条能用的）`
+      return
+    }
     jokes = fresh
+    jokeSource = `${repo} · Haiku 今天编的 ${fresh.length} 条`
     await $.store.set(key, fresh)
     // Yesterday's batches are no use: keep the store small.
     for (const k of await $.store.keys()) {
       if (k.startsWith('jokes:') && !k.startsWith(`jokes:${day}:`)) await $.store.delete(k)
     }
-  } catch {
-    // The built-in jokes stand.
-  } finally {
-    generating = false
+  } catch (err) {
+    jokeSource = `内置笑话（出错：${String(err).slice(0, 120)}）`
   }
 }
 
@@ -172,7 +186,8 @@ export const register: Register = on => {
 
   on('command.run', { command: 'fortune' }, async $ => {
     const { day, weekday } = await today($)
-    return { text: formatFortune(fortuneOf(day, weekday)) }
+    await loadJokes($)
+    return { text: `${formatFortune(fortuneOf(day, weekday))}\n   今日笑话：${jokeSource}` }
   })
 
   on('prompt.submit', async ($, e, next) => {
