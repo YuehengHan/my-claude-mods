@@ -1,0 +1,7 @@
+{
+  "name": "control-tower",
+  "version": "0.1.0",
+  "description": "/tower: one pane showing every Claude Code session on this machine — which is working, which waits for you, which is done",
+  "author": { "name": "YuehengHan" },
+  "types": "./types/index.d.ts"
+}

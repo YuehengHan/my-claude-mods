@@ -31,6 +31,26 @@
       "name": "claude-mood",
       "source": "./plugins/claude-mood",
       "description": "Claude's mood in the status line, from what the turn has read, written and broken"
+    },
+    {
+      "name": "control-tower",
+      "source": "./plugins/control-tower",
+      "description": "/tower: every Claude session on this machine in one pane — working, waiting for you, done"
+    },
+    {
+      "name": "tldr",
+      "source": "./plugins/tldr",
+      "description": "A one-line TL;DR (by Haiku) under every long answer"
+    },
+    {
+      "name": "sdk-sync",
+      "source": "./plugins/sdk-sync",
+      "description": "SpatialReal SDK graph: flags public API edits, names the SDKs/docs/examples to follow, hands the change to their sessions (/sync)"
+    },
+    {
+      "name": "fortune",
+      "source": "./plugins/fortune",
+      "description": "Programmer jokes in the status line while Claude works, and a daily /fortune"
     }
   ]
 }

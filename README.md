@@ -9,6 +9,10 @@ Claude Code mods (function-hook plugins) for working across many repos and many 
 | **repo-guard** | Blocks `push --force`, pushes to main/master, `reset --hard`, `clean -f`, `checkout .`, `branch -D`, `stash clear`, `rm -rf ~`. Asks before Claude first edits a repo other than the session's own. |
 | **claude-pet** | A status-line pet that earns xp from your work, grows 🥚 → 🦅, gets dizzy on errors, sleeps when you're away, and unlocks achievements. Hero plays on a level up. `/pet`, `/pet name <name>`. |
 | **claude-mood** | Claude's mood in the status line: 🤔 reading, ✍️ writing, 🧪 testing, 😤 after a few errors, 😌 when done — with 📖 ✏️ ⚡ 💥 counters. |
+| **control-tower** | `/tower` opens a pane listing every Claude session on this machine: ✋ waiting for you, ⏳ working, ✅ done, with its task and last answer. The status line tells you when *another* session needs you. |
+| **tldr** | A one-line `💡 TL;DR` under every long answer (Haiku), so a session you switch back to reads at a glance. |
+| **sdk-sync** | Knows the SpatialReal SDK graph (web/android/ios/python SDKs, shared-proto, SPAvatarCore, livekit plugin, docs, examples). When Claude edits a public API it is told which repos follow and ends with an "SDK sync" checklist; the change (diff + Haiku summary) is handed to sessions in those repos: `/sync`, `/sync apply <id>`, `/sync done <id>`, `/sync check`. Edit the graph in `plugins/sdk-sync/hooks/sdk-map.ts`. |
+| **fortune** | Programmer jokes rotate in the status line while Claude works; the day's first prompt shows 今日运势 (`/fortune`). Fridays never deploy. |
 
 ## Install
 

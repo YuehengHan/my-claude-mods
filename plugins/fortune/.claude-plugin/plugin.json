@@ -1,0 +1,6 @@
+{
+  "name": "fortune",
+  "version": "0.1.0",
+  "description": "Programmer jokes in the status line while Claude works, and a daily fortune (/fortune) — 今日宜重构，忌周五上线",
+  "author": { "name": "YuehengHan" }
+}
