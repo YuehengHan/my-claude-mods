@@ -1,6 +1,8 @@
 {
   "name": "tldr",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A one-line TL;DR under every long answer, written by Haiku, so a session you switch back to reads at a glance",
-  "author": { "name": "YuehengHan" }
+  "author": {
+    "name": "YuehengHan"
+  }
 }

@@ -61,11 +61,27 @@ let dir = ''
 
 const basename = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path
 
+/** `backend-ng`, or `backend-ng · fix/error-codes` in a worktree or a renamed checkout. */
+export function nameOf(remote: string, folder: string, branch: string): string {
+  const repo = remote.trim().replace(/\.git$/, '').split(/[/:]/).pop() || folder
+  if (folder === repo || branch === '' || branch === 'HEAD') return repo
+  return `${repo} · ${branch}`
+}
+
+async function displayName($: EngineInterface): Promise<string> {
+  const run = async (args: string[]) => {
+    const r = await $.process.run(['git', ...args], { timeoutMs: 5000 }).catch(() => null)
+    return r !== null && r.exitCode === 0 ? r.stdout.trim() : ''
+  }
+  const top = await run(['rev-parse', '--show-toplevel'])
+  if (top === '') return basename(await $.session.cwd())
+  return nameOf(await run(['remote', 'get-url', 'origin']), basename(top), await run(['rev-parse', '--abbrev-ref', 'HEAD']))
+}
+
 async function init($: EngineInterface) {
   const home = (await $.env.get('HOME')) ?? ''
   dir = `${home}/.claude/control-tower`
-  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: 5000 })
-  const repo = basename(top.exitCode === 0 ? top.stdout.trim() : await $.session.cwd())
+  const repo = await displayName($)
   const now = await $.clock.now()
   me = { id: await $.session.id(), repo, task: '', prompt: '', last: '', state: 'idle', since: now, updatedAt: now }
   await $.state.set(SELF, me.id)

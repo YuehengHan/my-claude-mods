@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { ago, arrange, headline } from '../hooks/register.tsx'
+import { ago, arrange, headline, nameOf } from '../hooks/register.tsx'
 import type { TowerEntry } from '../types'
 
 const NOW = 1_000_000_000
@@ -32,4 +32,10 @@ test('durations', async () => {
   expect(ago(42_000)).toBe('42s')
   expect(ago(5 * 60_000)).toBe('5m')
   expect(ago(90 * 60_000)).toBe('1h30m')
+})
+
+test('sessions are named by repo, with the branch in a worktree', async () => {
+  expect(nameOf('https://github.com/SpatialReal-ai/backend-ng.git', 'backend-ng', 'main')).toBe('backend-ng')
+  expect(nameOf('git@github.com:SpatialReal-ai/backend-ng.git', 'backend-sdk-error-codes-54b535', 'fix/error-codes')).toBe('backend-ng · fix/error-codes')
+  expect(nameOf('', 'scratch', 'main')).toBe('scratch')
 })
