@@ -44,11 +44,8 @@ export function counts(t: Tally): string {
   return parts.length ? `  ${parts.join(' ')}` : ''
 }
 
-const LINE = { plugin: 'claude-mood', key: 'line' } as const
-
-/** Drawn after the spinner's word while a turn runs; empty between turns. */
 function show($: EngineInterface, mood: string) {
-  void $.state.set(LINE, `${mood}${counts(tally)}`)
+  $.ui.status(`${mood}${counts(tally)}`)
 }
 
 export const register: Register = on => {
@@ -79,13 +76,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId === undefined) await $.state.set(LINE, '')
+    if (e.agentId === undefined) show($, doneMood(tally, e.reason, e.isAborted))
     return done
-  })
-
-  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    const { value: line = '' } = await $.state.get(LINE)
-    if (line === '') return next(e)
-    return next({ ...e, props: { ...e.props, suffix: `… ${line}` } })
   })
 }

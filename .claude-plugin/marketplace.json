@@ -30,7 +30,7 @@
     {
       "name": "claude-mood",
       "source": "./plugins/claude-mood",
-      "description": "Claude's mood beside the working spinner"
+      "description": "Claude's mood in the status line, from what the turn has read, written and broken"
     },
     {
       "name": "control-tower",
@@ -50,7 +50,7 @@
     {
       "name": "fortune",
       "source": "./plugins/fortune",
-      "description": "Programmer jokes in the working spinner, and a daily /fortune"
+      "description": "Programmer jokes after the working spinner, and a daily /fortune"
     }
   ]
 }

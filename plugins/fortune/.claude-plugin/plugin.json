@@ -1,7 +1,7 @@
 {
   "name": "fortune",
-  "version": "0.2.0",
-  "description": "Programmer jokes in the working spinner, and a daily fortune (/fortune) — 今日宜重构，忌周五上线",
+  "version": "0.3.0",
+  "description": "Programmer jokes after the working spinner, and a daily fortune (/fortune) — 今日宜重构，忌周五上线",
   "author": {
     "name": "YuehengHan"
   },
