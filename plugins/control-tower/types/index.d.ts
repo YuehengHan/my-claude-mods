@@ -19,6 +19,8 @@ export type TowerEntry = {
   hostId?: string
   /** The session's name in the desktop app's sidebar. */
   title?: string
+  /** When its last turn ended, from the desktop app's record (survives restarts, unlike `since`). */
+  activeAt?: number
 }
 
 declare module 'claude-code' {

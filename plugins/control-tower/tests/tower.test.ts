@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { ago, arrange, bannerOf, guessNeed, nameOf, nameShown, parseNeed, sessionLink } from '../hooks/register.tsx'
+import { ago, ageOf, arrange, bannerOf, guessNeed, nameOf, nameShown, parseNeed, sessionLink } from '../hooks/register.tsx'
 import type { TowerEntry } from '../types'
 
 const NOW = 1_000_000_000
@@ -97,4 +97,12 @@ test('sessions go by their sidebar title, the repo only without one', async () =
   expect(nameShown({ repo: 'backend-ng' })).toBe('backend-ng')
   const b = bannerOf([s({ id: 'b', title: '修 websocket 重连', repo: 'web-sdk', state: 'waiting' })], 'me', NOW)
   expect(b[0]?.repo).toBe('修 websocket 重连')
+})
+
+test('age counts from the last turn, not from a restart', async () => {
+  // Restarted 55 s ago, but its last turn ended 3 h ago.
+  expect(ageOf({ state: 'done', since: NOW - 55_000, activeAt: NOW - 3 * 3600_000 }, NOW)).toBe('3h')
+  // A running turn counts from its own start.
+  expect(ageOf({ state: 'working', since: NOW - 20_000, activeAt: NOW - 3 * 3600_000 }, NOW)).toBe('20s')
+  expect(ageOf({ state: 'done', since: NOW - 90_000 }, NOW)).toBe('1m')
 })

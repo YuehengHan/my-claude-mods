@@ -15,6 +15,8 @@ const DISMISSED_FILE = '_dismissed.json'
 const GONE_AFTER_MS = 90_000
 const BEAT_MS = 15_000
 const SCAN_MS = 5_000
+/** Waiting sessions the banner lists before it says how many more. */
+const BANNER_ROWS = 3
 
 export const ORDER: Record<TowerState, number> = { waiting: 0, failed: 1, working: 2, done: 3, idle: 4, ended: 5 }
 
@@ -59,6 +61,12 @@ export function nameShown(s: Pick<TowerEntry, 'title' | 'repo'>): string {
   return s.title?.trim() || s.repo
 }
 
+/** How long ago a session last moved: a running turn from its start, else from the end of its last turn. */
+export function ageOf(s: Pick<TowerEntry, 'state' | 'since' | 'activeAt'>, now: number): string {
+  const from = s.state === 'working' || s.activeAt === undefined ? s.since : Math.min(s.since, s.activeAt)
+  return ago(now - from)
+}
+
 export type BannerItem = {
   id: string
   hostId?: string
@@ -89,7 +97,7 @@ export function bannerOf(
         hostId: s.hostId,
         since: s.since,
         repo: nameShown(s),
-        age: ago(now - s.since),
+        age: ageOf(s, now),
         icon: look.icon,
         label: look.label,
         what: s.need?.what ?? '',
@@ -218,23 +226,25 @@ async function findMeta($: EngineInterface, hostId: string): Promise<string | nu
   return null
 }
 
-/** The sidebar's name for this session, read afresh so a rename shows within a heartbeat. */
-async function titleOf($: EngineInterface): Promise<string | undefined> {
-  if (me?.hostId === undefined) return undefined
+/** The sidebar's name and last turn's end for this session, read afresh so a rename shows within a heartbeat. */
+async function metaOf($: EngineInterface): Promise<{ title?: string; activeAt?: number }> {
+  if (me?.hostId === undefined) return {}
   if (metaPath === undefined) metaPath = await findMeta($, me.hostId).catch(() => null)
-  if (metaPath === null) return undefined
+  if (metaPath === null) return {}
   try {
-    const title = (JSON.parse(String(await $.fs.read(metaPath))) as { title?: unknown }).title
-    return typeof title === 'string' && title.trim() ? title.trim() : undefined
+    const m = JSON.parse(String(await $.fs.read(metaPath))) as { title?: unknown; lastTurnEdgeAt?: unknown; lastActivityAt?: unknown }
+    const at = typeof m.lastTurnEdgeAt === 'number' ? m.lastTurnEdgeAt : typeof m.lastActivityAt === 'number' ? m.lastActivityAt : undefined
+    return { title: typeof m.title === 'string' && m.title.trim() ? m.title.trim() : undefined, activeAt: at }
   } catch {
-    return me.title
+    return {}
   }
 }
 
 async function save($: EngineInterface, patch: Partial<TowerEntry>) {
   if (me === null || dir === '') return
-  const title = await titleOf($)
-  if (title !== undefined) me = { ...me, title }
+  const meta = await metaOf($)
+  if (meta.title !== undefined) me = { ...me, title: meta.title }
+  if (meta.activeAt !== undefined) me = { ...me, activeAt: meta.activeAt }
   const now = await $.clock.now()
   const stateChanged = patch.state !== undefined && patch.state !== me.state
   me = { ...me, ...patch, since: stateChanged ? now : me.since, updatedAt: now }
@@ -339,7 +349,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A row under where-am-i's, only while another session waits for you, saying for what.
+  // Rows under where-am-i's, only while another session waits for you: name left, what it wants, age and ✓ right.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
     if (e.props.hasSurvey) return rest
@@ -350,36 +360,37 @@ export const register: Register = on => {
     const waiting = bannerOf(sessions, self, now, dismissed)
     if (waiting.length === 0) return rest
     const { Box, Text, Button } = $.ui.resolve(e)
+    const shown = waiting.slice(0, BANNER_ROWS)
+    const nameWidth = Math.min(22, Math.max(...shown.map(it => it.repo.length)))
     return (
       <Box flexDirection="column">
         {rest}
-        <Box flexDirection="row" flexWrap="wrap">
-          {waiting.map(it =>
-            sessionLink(it.hostId) ? (
-              <Box>
-                <Button
-                  key={`go-${it.id}`}
-                  plain
-                  label={`${it.icon} ${it.repo} ${it.label}${it.what ? `：${it.what}` : ''} ${it.age}`}
-                  onPress={() => openSession($, it.hostId)}
-                />
-                <Text> </Text>
-                <Button key={`done-${it.id}`} plain dimColor label="✓" onPress={() => dismiss($, it.id, it.since)} />
-                <Text>{'   '}</Text>
-              </Box>
-            ) : (
-              <Box>
-                <Text color="warning">
-                  {it.icon} {it.repo} {it.label}
-                  {it.what ? `：${it.what}` : ''} {it.age}{' '}
-                </Text>
-                <Button key={`done-${it.id}`} plain dimColor label="✓" onPress={() => dismiss($, it.id, it.since)} />
-                <Text>{'   '}</Text>
-              </Box>
-            ),
-          )}
-          <Button key="tower" label="tower" plain onPress={() => $.ui.open({ id: PANE, title: '🗼 Control tower' })} />
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text color="warning" bold>
+            ✋ {waiting.length} 个会话在等你
+          </Text>
+          <Button key="tower" plain dimColor label="全部 ↗" onPress={() => $.ui.open({ id: PANE, title: '🗼 Control tower' })} />
         </Box>
+        {shown.map(it => (
+          <Box flexDirection="row" justifyContent="space-between" paddingLeft={2}>
+            <Box flexDirection="row" gap={2} flexShrink={1}>
+              <Button key={`go-${it.id}`} plain label={`${it.icon} ${it.repo.padEnd(nameWidth)}`} onPress={() => openSession($, it.hostId)} />
+              <Text color="warning" wrap="truncate-end">
+                {it.label}
+                {it.what ? `  ${it.what}` : ''}
+              </Text>
+            </Box>
+            <Box flexDirection="row" gap={2} flexShrink={0}>
+              <Text dimColor>{it.age}</Text>
+              <Button key={`done-${it.id}`} plain dimColor label="✓" onPress={() => dismiss($, it.id, it.since)} />
+            </Box>
+          </Box>
+        ))}
+        {waiting.length > shown.length && (
+          <Box paddingLeft={2}>
+            <Text dimColor>还有 {waiting.length - shown.length} 个，点「全部」看</Text>
+          </Box>
+        )}
       </Box>
     )
   })
@@ -390,59 +401,52 @@ export const register: Register = on => {
     const { value: self = '' } = await $.state.get(SELF)
     const { value: now = 0 } = await $.state.get(NOW)
     const { value: dismissed = {} } = await $.state.get(DISMISSED)
-    const width = Math.max(30, e.props.bodyColumns)
-    const nameWidth = Math.min(28, Math.max(...sessions.map(s => nameShown(s).length), 8))
 
     if (sessions.length === 0) {
       return <Text dimColor>No live sessions yet. Each one shows up after its first prompt.</Text>
     }
 
-    const hint = sessions.some(s => s.id !== self && sessionLink(s.hostId)) ? '  ·  点会话名跳过去' : ''
-    const counts = (['waiting', 'working', 'done', 'failed'] as const)
+    const counts = (['waiting', 'working', 'done', 'failed', 'idle'] as const)
       .map(st => [st, sessions.filter(s => s.state === st).length] as const)
       .filter(([, n]) => n > 0)
-      .map(([st, n]) => `${LOOK[st].icon}${n}`)
-      .join('  ')
+      .map(([st, n]) => `${LOOK[st].icon} ${n} ${LOOK[st].label}`)
+      .join('   ')
 
     return (
       <Box flexDirection="column">
-        <Text dimColor>
-          {counts}
-          {hint}
-        </Text>
+        <Text dimColor>{counts}</Text>
         {sessions.map(s => {
           const look = LOOK[s.state]
+          const mine = s.id === self
+          const off = isDismissed(s, dismissed)
           return (
             <Box flexDirection="column" marginTop={1}>
-              {s.id !== self && sessionLink(s.hostId) ? (
+              <Box flexDirection="row" justifyContent="space-between">
                 <Button
                   key={`go-${s.id}`}
                   plain
-                  label={`${look.icon} ${nameShown(s).padEnd(nameWidth)}  ${look.label} ${ago(now - s.since)}  ↗`}
-                  onPress={() => openSession($, s.hostId)}
+                  label={`${look.icon} ${nameShown(s)}${mine ? '（本会话）' : sessionLink(s.hostId) ? ' ↗' : ''}`}
+                  onPress={() => (mine ? undefined : openSession($, s.hostId))}
                 />
-              ) : (
-                <Text wrap="truncate-end">
-                  <Text color={look.color} bold>{look.icon} {nameShown(s).padEnd(nameWidth)}</Text>
-                  <Text color={look.color}> {look.label} {ago(now - s.since)}</Text>
-                  {s.id === self && <Text dimColor> (本会话)</Text>}
+                <Text color={look.color} dimColor={s.state !== 'waiting' && s.state !== 'working'}>
+                  {look.label} · {ageOf(s, now)}
                 </Text>
-              )}
-              {s.state === 'waiting' && s.id !== self && (
-                <Box>
-                  <Text color={isDismissed(s, dismissed) ? 'inactive' : 'warning'} wrap="truncate-end">
-                    {'   '}
+              </Box>
+              {s.state === 'waiting' && !mine && (
+                <Box paddingLeft={3}>
+                  <Text color={off ? 'inactive' : 'warning'} wrap="truncate-end">
                     {s.need ? `${NEED_LOOK[s.need.kind].icon} ${NEED_LOOK[s.need.kind].label}` : '✋ 在等你'}
                     {s.need?.what ? `：${s.need.what}` : ''}
-                    {isDismissed(s, dismissed) ? '（已忽略）' : '  '}
+                    {off ? '（已忽略）' : ''}
                   </Text>
-                  {!isDismissed(s, dismissed) && (
-                    <Button key={`done-${s.id}`} plain dimColor label="✓ 忽略" onPress={() => dismiss($, s.id, s.since)} />
-                  )}
                 </Box>
               )}
               {s.last !== '' && s.state !== 'working' && (
-                <Text dimColor wrap="truncate-end">   ↳ {oneLine(s.last, width - 6)}</Text>
+                <Box paddingLeft={3}>
+                  <Text dimColor wrap="truncate-end">
+                    ↳ {s.last}
+                  </Text>
+                </Box>
               )}
             </Box>
           )
