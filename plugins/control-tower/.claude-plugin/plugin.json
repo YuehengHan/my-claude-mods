@@ -1,6 +1,6 @@
 {
   "name": "control-tower",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "/tower: one pane showing every Claude Code session on this machine — which is working, which waits for you, which is done",
   "author": {
     "name": "YuehengHan"

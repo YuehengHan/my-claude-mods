@@ -50,7 +50,7 @@ export const NEED_LOOK: Record<NeedKind, { icon: string; label: string }> = {
   action: { icon: '👉', label: '要你操作' },
 }
 
-export type BannerItem = { repo: string; age: string; icon: string; label: string; what: string }
+export type BannerItem = { id: string; hostId?: string; repo: string; age: string; icon: string; label: string; what: string }
 
 /** The banner: only the other sessions waiting for you, and what each wants. */
 export function bannerOf(entries: readonly TowerEntry[], self: string, now: number): BannerItem[] {
@@ -58,7 +58,7 @@ export function bannerOf(entries: readonly TowerEntry[], self: string, now: numb
     .filter(s => s.id !== self && s.state === 'waiting')
     .map(s => {
       const look = s.need ? NEED_LOOK[s.need.kind] : { icon: '✋', label: '在等你' }
-      return { repo: s.repo, age: ago(now - s.since), icon: look.icon, label: look.label, what: s.need?.what ?? '' }
+      return { id: s.id, hostId: s.hostId, repo: s.repo, age: ago(now - s.since), icon: look.icon, label: look.label, what: s.need?.what ?? '' }
     })
 }
 
@@ -105,6 +105,20 @@ async function needOf($: EngineInterface, answer: string): Promise<TowerNeed | n
   return r !== null && r.isAnswered ? parseNeed(r.text) : guessNeed(answer)
 }
 
+const HOST_ID = /^local_[A-Za-z0-9-]{1,64}$/
+
+/** The desktop link that brings a session to the front; null where there is none to open. */
+export function sessionLink(hostId: string | undefined): string | null {
+  return hostId !== undefined && HOST_ID.test(hostId) ? `claude://code/continue?session=${hostId}` : null
+}
+
+/** Switches the desktop app to that session, as its own "continue" menu does. */
+async function openSession($: EngineInterface, hostId: string | undefined) {
+  const url = sessionLink(hostId)
+  if (url === null) return
+  await $.process.run(['open', url], { timeoutMs: 5000 }).catch(() => undefined)
+}
+
 const firstLine = (text: string) => oneLine(text.split('\n').find(l => l.trim()) ?? '')
 
 /** A finished turn: done, then waiting if its last words ask something of you. */
@@ -141,7 +155,8 @@ async function init($: EngineInterface) {
   dir = `${home}/.claude/control-tower`
   const repo = await displayName($)
   const now = await $.clock.now()
-  me = { id: await $.session.id(), repo, task: '', prompt: '', last: '', state: 'idle', since: now, updatedAt: now }
+  const hostId = (await $.env.get('CLAUDE_CODE_HOST_SESSION_ID')) || undefined
+  me = { id: await $.session.id(), hostId, repo, task: '', prompt: '', last: '', state: 'idle', since: now, updatedAt: now }
   await $.state.set(SELF, me.id)
   await save($, {})
   // A session reopened after a night's work: did its last answer leave you something to do?
@@ -254,16 +269,25 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {rest}
         <Box flexDirection="row" flexWrap="wrap">
-          {waiting.map(it => (
-            <Text color="warning">
-              <Text bold>
-                {it.icon} {it.repo}
-              </Text>{' '}
-              {it.label}
-              {it.what ? `：${it.what}` : ''} <Text dimColor>{it.age}</Text>
-              {'   '}
-            </Text>
-          ))}
+          {waiting.map(it =>
+            sessionLink(it.hostId) ? (
+              <Box>
+                <Button
+                  key={`go-${it.id}`}
+                  plain
+                  label={`${it.icon} ${it.repo} ${it.label}${it.what ? `：${it.what}` : ''} ${it.age}`}
+                  onPress={() => openSession($, it.hostId)}
+                />
+                <Text>{'   '}</Text>
+              </Box>
+            ) : (
+              <Text color="warning">
+                {it.icon} {it.repo} {it.label}
+                {it.what ? `：${it.what}` : ''} {it.age}
+                {'   '}
+              </Text>
+            ),
+          )}
           <Button key="tower" label="tower" plain onPress={() => $.ui.open({ id: PANE, title: '🗼 Control tower' })} />
         </Box>
       </Box>
@@ -271,7 +295,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const { value: sessions = [] } = await $.state.get(SESSIONS)
     const { value: self = '' } = await $.state.get(SELF)
     const { value: now = 0 } = await $.state.get(NOW)
@@ -282,6 +306,7 @@ export const register: Register = on => {
       return <Text dimColor>No live sessions yet. Each one shows up after its first prompt.</Text>
     }
 
+    const hint = sessions.some(s => s.id !== self && sessionLink(s.hostId)) ? '  ·  点会话名跳过去' : ''
     const counts = (['waiting', 'working', 'done', 'failed'] as const)
       .map(st => [st, sessions.filter(s => s.state === st).length] as const)
       .filter(([, n]) => n > 0)
@@ -290,17 +315,29 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Text dimColor>{counts}</Text>
+        <Text dimColor>
+          {counts}
+          {hint}
+        </Text>
         {sessions.map(s => {
           const look = LOOK[s.state]
           const what = s.task || s.prompt || '—'
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Text wrap="truncate-end">
-                <Text color={look.color} bold>{look.icon} {s.repo.padEnd(repoWidth)}</Text>
-                <Text color={look.color}> {look.label} {ago(now - s.since)}</Text>
-                {s.id === self && <Text dimColor> (本会话)</Text>}
-              </Text>
+              {s.id !== self && sessionLink(s.hostId) ? (
+                <Button
+                  key={`go-${s.id}`}
+                  plain
+                  label={`${look.icon} ${s.repo.padEnd(repoWidth)}  ${look.label} ${ago(now - s.since)}  ↗`}
+                  onPress={() => openSession($, s.hostId)}
+                />
+              ) : (
+                <Text wrap="truncate-end">
+                  <Text color={look.color} bold>{look.icon} {s.repo.padEnd(repoWidth)}</Text>
+                  <Text color={look.color}> {look.label} {ago(now - s.since)}</Text>
+                  {s.id === self && <Text dimColor> (本会话)</Text>}
+                </Text>
+              )}
               {s.state === 'waiting' && s.need && (
                 <Text color="warning" wrap="truncate-end">
                   {'   '}

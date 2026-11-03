@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { ago, arrange, bannerOf, guessNeed, nameOf, parseNeed } from '../hooks/register.tsx'
+import { ago, arrange, bannerOf, guessNeed, nameOf, parseNeed, sessionLink } from '../hooks/register.tsx'
 import type { TowerEntry } from '../types'
 
 const NOW = 1_000_000_000
@@ -34,7 +34,7 @@ test('the banner lists only other sessions waiting for you', async () => {
     'me',
     NOW,
   )
-  expect(b).toEqual([{ repo: 'backend-ng', age: '2m', icon: '✋', label: '在等你', what: '' }])
+  expect(b).toEqual([{ id: 'b', hostId: undefined, repo: 'backend-ng', age: '2m', icon: '✋', label: '在等你', what: '' }])
 })
 
 test('durations', async () => {
@@ -75,4 +75,11 @@ test('without the model: a command to run, or a closing question', async () => {
   expect(guessNeed('改好了。请依次跑：\n```\n/reload-plugins\n```')).toEqual({ kind: 'command', what: '/reload-plugins' })
   expect(guessNeed('两个方案。\n要我按建议改一下 /task 吗？')).toEqual({ kind: 'question', what: '要我按建议改一下 /task 吗？' })
   expect(guessNeed('全部完成，测试通过。')).toBeNull()
+})
+
+test('only a desktop session id makes a link', async () => {
+  expect(sessionLink('local_d5473dcf-9b27-43fa-8427-3e74b80204e2')).toBe('claude://code/continue?session=local_d5473dcf-9b27-43fa-8427-3e74b80204e2')
+  expect(sessionLink(undefined)).toBeNull()
+  expect(sessionLink('5f431199-ef67-436b-9e96-e8581a869130')).toBeNull()
+  expect(sessionLink('local_x; rm -rf ~')).toBeNull()
 })
