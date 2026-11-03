@@ -376,7 +376,6 @@ export const register: Register = on => {
         </Text>
         {sessions.map(s => {
           const look = LOOK[s.state]
-          const what = s.task || s.prompt || '—'
           return (
             <Box flexDirection="column" marginTop={1}>
               {s.id !== self && sessionLink(s.hostId) ? (
@@ -406,7 +405,6 @@ export const register: Register = on => {
                   )}
                 </Box>
               )}
-              <Text wrap="truncate-end">   🎯 {oneLine(what, width - 6)}</Text>
               {s.last !== '' && s.state !== 'working' && (
                 <Text dimColor wrap="truncate-end">   ↳ {oneLine(s.last, width - 6)}</Text>
               )}
