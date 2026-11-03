@@ -17,6 +17,8 @@ export type TowerEntry = {
   need?: TowerNeed
   /** The desktop app's id for the session (local_…), which a claude:// link opens. */
   hostId?: string
+  /** The session's name in the desktop app's sidebar. */
+  title?: string
 }
 
 declare module 'claude-code' {

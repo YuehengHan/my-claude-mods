@@ -54,6 +54,11 @@ export const NEED_LOOK: Record<NeedKind, { icon: string; label: string }> = {
   action: { icon: '👉', label: '要你操作' },
 }
 
+/** What a session is called: its desktop sidebar title, else its repo. */
+export function nameShown(s: Pick<TowerEntry, 'title' | 'repo'>): string {
+  return s.title?.trim() || s.repo
+}
+
 export type BannerItem = {
   id: string
   hostId?: string
@@ -83,7 +88,7 @@ export function bannerOf(
         id: s.id,
         hostId: s.hostId,
         since: s.since,
-        repo: s.repo,
+        repo: nameShown(s),
         age: ago(now - s.since),
         icon: look.icon,
         label: look.label,
@@ -197,8 +202,39 @@ async function init($: EngineInterface) {
   }
 }
 
+let metaPath: string | null | undefined
+
+/** This session's file in the desktop app's store, found once: claude-code-sessions/<org>/<account>/<id>.json. */
+async function findMeta($: EngineInterface, hostId: string): Promise<string | null> {
+  const home = (await $.env.get('HOME')) ?? ''
+  const base = `${home}/Library/Application Support/Claude/claude-code-sessions`
+  for (const a of await $.fs.list(base).catch(() => [])) {
+    if (a.kind !== 'dir') continue
+    for (const b of await $.fs.list(`${base}/${a.name}`).catch(() => [])) {
+      const path = `${base}/${a.name}/${b.name}/${hostId}.json`
+      if (b.kind === 'dir' && (await $.fs.exists(path))) return path
+    }
+  }
+  return null
+}
+
+/** The sidebar's name for this session, read afresh so a rename shows within a heartbeat. */
+async function titleOf($: EngineInterface): Promise<string | undefined> {
+  if (me?.hostId === undefined) return undefined
+  if (metaPath === undefined) metaPath = await findMeta($, me.hostId).catch(() => null)
+  if (metaPath === null) return undefined
+  try {
+    const title = (JSON.parse(String(await $.fs.read(metaPath))) as { title?: unknown }).title
+    return typeof title === 'string' && title.trim() ? title.trim() : undefined
+  } catch {
+    return me.title
+  }
+}
+
 async function save($: EngineInterface, patch: Partial<TowerEntry>) {
   if (me === null || dir === '') return
+  const title = await titleOf($)
+  if (title !== undefined) me = { ...me, title }
   const now = await $.clock.now()
   const stateChanged = patch.state !== undefined && patch.state !== me.state
   me = { ...me, ...patch, since: stateChanged ? now : me.since, updatedAt: now }
@@ -355,7 +391,7 @@ export const register: Register = on => {
     const { value: now = 0 } = await $.state.get(NOW)
     const { value: dismissed = {} } = await $.state.get(DISMISSED)
     const width = Math.max(30, e.props.bodyColumns)
-    const repoWidth = Math.min(24, Math.max(...sessions.map(s => s.repo.length), 8))
+    const nameWidth = Math.min(28, Math.max(...sessions.map(s => nameShown(s).length), 8))
 
     if (sessions.length === 0) {
       return <Text dimColor>No live sessions yet. Each one shows up after its first prompt.</Text>
@@ -382,12 +418,12 @@ export const register: Register = on => {
                 <Button
                   key={`go-${s.id}`}
                   plain
-                  label={`${look.icon} ${s.repo.padEnd(repoWidth)}  ${look.label} ${ago(now - s.since)}  ↗`}
+                  label={`${look.icon} ${nameShown(s).padEnd(nameWidth)}  ${look.label} ${ago(now - s.since)}  ↗`}
                   onPress={() => openSession($, s.hostId)}
                 />
               ) : (
                 <Text wrap="truncate-end">
-                  <Text color={look.color} bold>{look.icon} {s.repo.padEnd(repoWidth)}</Text>
+                  <Text color={look.color} bold>{look.icon} {nameShown(s).padEnd(nameWidth)}</Text>
                   <Text color={look.color}> {look.label} {ago(now - s.since)}</Text>
                   {s.id === self && <Text dimColor> (本会话)</Text>}
                 </Text>

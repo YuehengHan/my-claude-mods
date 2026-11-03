@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { ago, arrange, bannerOf, guessNeed, nameOf, parseNeed, sessionLink } from '../hooks/register.tsx'
+import { ago, arrange, bannerOf, guessNeed, nameOf, nameShown, parseNeed, sessionLink } from '../hooks/register.tsx'
 import type { TowerEntry } from '../types'
 
 const NOW = 1_000_000_000
@@ -89,4 +89,12 @@ test('a dismissed wait leaves the banner until the session waits again', async (
   expect(bannerOf([waiting], 'me', NOW, { b: NOW - 60_000 })).toEqual([])
   // A new wait has a new since: it is back.
   expect(bannerOf([{ ...waiting, since: NOW - 5_000 }], 'me', NOW, { b: NOW - 60_000 }).map(i => i.repo)).toEqual(['backend-ng'])
+})
+
+test('sessions go by their sidebar title, the repo only without one', async () => {
+  expect(nameShown({ title: 'Claude mod 玩法', repo: 'scratch-2026-10-08-9ce1b9' })).toBe('Claude mod 玩法')
+  expect(nameShown({ title: '  ', repo: 'backend-ng' })).toBe('backend-ng')
+  expect(nameShown({ repo: 'backend-ng' })).toBe('backend-ng')
+  const b = bannerOf([s({ id: 'b', title: '修 websocket 重连', repo: 'web-sdk', state: 'waiting' })], 'me', NOW)
+  expect(b[0]?.repo).toBe('修 websocket 重连')
 })
