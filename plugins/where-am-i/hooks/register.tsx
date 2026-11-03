@@ -103,9 +103,11 @@ export const register: Register = on => {
               {info.dirty ? `± ${info.dirty} changed` : '✓ clean'}
             </Text>
           )}
-          <Text dimColor={!current}>
-            {'  '}🎯 {current || '/task to name this task'}
-          </Text>
+          {current !== '' && (
+            <Text>
+              {'  '}🎯 {current}
+            </Text>
+          )}
         </Box>
         {rest}
       </Box>

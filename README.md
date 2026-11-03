@@ -4,7 +4,7 @@ Claude Code mods (function-hook plugins) for working across many repos and many 
 
 | Mod | What it does |
 | --- | --- |
-| **where-am-i** | A band above the prompt: `📁 repo  🌿 branch ↑2  ± 3 changed  🎯 task`. `/task <text>` names what this session is doing. |
+| **where-am-i** | A band above the prompt: `📁 repo  🌿 branch ↑2  ± 3 changed  🎯 task`. `/task <text>` names what this session is doing; the 🎯 shows only once you set one. |
 | **done-ping** | A macOS notification (repo, duration, your prompt) with a sound per kind: 🔔 Glass when a turn over 30 s is done, Basso when it failed, Submarine when Claude is waiting on you. Change them in `SOUNDS`. |
 | **repo-guard** | Blocks `push --force`, pushes to main/master, `reset --hard`, `clean -f`, `checkout .`, `branch -D`, `stash clear`, `rm -rf ~`. Asks before Claude first edits a repo other than the session's own. |
 | **claude-pet** | A pet that earns xp from your work, grows through five stages and unlocks achievements. Pick a species (`/pet species`: chick, cat, dog, dragon, dino, ocean, bug, plant, robot, moon) or your own emojis (`/pet emoji 🦊`, `/pet emoji 🥚 🐣 🦊 🐺 🐉`). Lives in the status line (`🦮 xixi (・_・)📖  Lv7 ▰▱▱▱▱▱`) with 18 moods that follow Claude: 💭 thinking, 📖 reading, ✍️ writing, ⚡ running, 🧪 testing, 🌐 browsing, 📣 delegating, ✋ waiting for you, 🔥 on a 25-call streak, 🌙 past 1am, 🎉 tests pass, 📦 commit/push, (×_×) error, (╬ಠ益ಠ) three in a row, bored after 5 idle minutes, asleep after 15. `/pet` for stats, `/pet name <name>`. |
