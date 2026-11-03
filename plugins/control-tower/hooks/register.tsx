@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { TowerEntry, TowerState } from '../types'
+import type { NeedKind, TowerEntry, TowerNeed, TowerState } from '../types'
 
 const PANE = 'control-tower'
 const SESSIONS = { plugin: 'control-tower', key: 'sessions' } as const
@@ -42,13 +42,76 @@ export function arrange(entries: readonly TowerEntry[], now: number): TowerEntry
     .sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.since - a.since)
 }
 
-export type BannerItem = { repo: string; age: string }
+export const NEED_LOOK: Record<NeedKind, { icon: string; label: string }> = {
+  permission: { icon: '🔐', label: '等你批准' },
+  question: { icon: '❓', label: '在问你' },
+  decision: { icon: '🤔', label: '等你决定' },
+  command: { icon: '⌨️', label: '要你执行' },
+  action: { icon: '👉', label: '要你操作' },
+}
 
-/** The banner: only the other sessions waiting for you (a permission or a question). */
+export type BannerItem = { repo: string; age: string; icon: string; label: string; what: string }
+
+/** The banner: only the other sessions waiting for you, and what each wants. */
 export function bannerOf(entries: readonly TowerEntry[], self: string, now: number): BannerItem[] {
   return arrange(entries, now)
     .filter(s => s.id !== self && s.state === 'waiting')
-    .map(s => ({ repo: s.repo, age: ago(now - s.since) }))
+    .map(s => {
+      const look = s.need ? NEED_LOOK[s.need.kind] : { icon: '✋', label: '在等你' }
+      return { repo: s.repo, age: ago(now - s.since), icon: look.icon, label: look.label, what: s.need?.what ?? '' }
+    })
+}
+
+const KINDS: readonly string[] = ['permission', 'question', 'decision', 'command', 'action']
+
+/** Haiku's `{"kind": ..., "what": ...}` → a need, or null for `none` and anything unreadable. */
+export function parseNeed(text: string): TowerNeed | null {
+  const json = /\{[\s\S]*\}/.exec(text)?.[0]
+  if (!json) return null
+  try {
+    const v = JSON.parse(json) as { kind?: unknown; what?: unknown }
+    if (typeof v.kind !== 'string' || !KINDS.includes(v.kind)) return null
+    return { kind: v.kind as NeedKind, what: oneLine(typeof v.what === 'string' ? v.what : '', 40) }
+  } catch {
+    return null
+  }
+}
+
+/** Without the model: a command block it asks you to run, or a closing question. */
+export function guessNeed(answer: string): TowerNeed | null {
+  const block = /```(?:bash|sh|zsh|shell)?\n([^\n`]+)/.exec(answer)
+  if (block && /请|跑|运行|执行|输入|run\b/i.test(answer)) return { kind: 'command', what: oneLine(block[1] ?? '', 40) }
+  const tail = answer.trim().split('\n').filter(l => l.trim()).at(-1) ?? ''
+  if (/[?？]\s*$/.test(tail)) return { kind: 'question', what: oneLine(tail, 40) }
+  return null
+}
+
+const NEED_SYSTEM = [
+  '你判断 AI 编程助手这一轮的最后一条回复，是不是在等用户亲自做某件事才能继续。',
+  '只输出一行 JSON：{"kind":"…","what":"…"}。',
+  'kind：command = 要用户运行命令（如 /reload-plugins、npm i、git push）；',
+  'action = 要用户在电脑上操作（重启 app、登录授权、点按钮、去看效果）；',
+  'decision = 给了选项要用户选或拍板；question = 问用户问题、要信息；',
+  'none = 只是汇报结果，或只是客套的“有需要再说”。',
+  'what：不超过 20 个字，说用户要做什么；是命令就直接写命令。',
+].join('\n')
+
+async function needOf($: EngineInterface, answer: string): Promise<TowerNeed | null> {
+  if (answer.trim().length < 2) return null
+  const reply = answer.length > 6000 ? answer.slice(-6000) : answer
+  const r = await $.model
+    .complete({ model: 'haiku', system: NEED_SYSTEM, prompt: reply, maxTokens: 120, timeoutMs: 15_000 })
+    .catch(() => null)
+  return r !== null && r.isAnswered ? parseNeed(r.text) : guessNeed(answer)
+}
+
+const firstLine = (text: string) => oneLine(text.split('\n').find(l => l.trim()) ?? '')
+
+/** A finished turn: done, then waiting if its last words ask something of you. */
+async function settle($: EngineInterface, answer: string) {
+  const need = await needOf($, answer)
+  // You may have answered in the meantime: only a still-finished turn waits.
+  if (need !== null && me?.state === 'done') await save($, { state: 'waiting', need })
 }
 
 let me: TowerEntry | null = null
@@ -81,6 +144,12 @@ async function init($: EngineInterface) {
   me = { id: await $.session.id(), repo, task: '', prompt: '', last: '', state: 'idle', since: now, updatedAt: now }
   await $.state.set(SELF, me.id)
   await save($, {})
+  // A session reopened after a night's work: did its last answer leave you something to do?
+  const last = (await $.session.messages().catch(() => [])).at(-1)
+  if (last?.role === 'assistant' && last.text.trim() !== '') {
+    await save($, { state: 'done', last: firstLine(last.text) })
+    await settle($, last.text)
+  }
 }
 
 async function save($: EngineInterface, patch: Partial<TowerEntry>) {
@@ -136,21 +205,23 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', ($, e, next) => {
-    void safely(save($, { state: 'working', prompt: oneLine(e.text) }))
+    void safely(save($, { state: 'working', prompt: oneLine(e.text), need: undefined }))
     return next(e)
   })
 
   on('classic.Notification', async ($, e, next) => {
     const ran = await next(e)
-    if (e.notification_type === 'permission_prompt' || e.notification_type === 'elicitation_dialog') {
-      void safely(save($, { state: 'waiting' }))
+    if (e.notification_type === 'permission_prompt') {
+      void safely(save($, { state: 'waiting', need: { kind: 'permission', what: oneLine(e.message, 40) } }))
+    } else if (e.notification_type === 'elicitation_dialog') {
+      void safely(save($, { state: 'waiting', need: { kind: 'question', what: oneLine(e.message, 40) } }))
     }
     return ran
   })
 
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
-    if (me?.state === 'waiting') void safely(save($, { state: 'working' }))
+    if (me?.state === 'waiting') void safely(save($, { state: 'working', need: undefined }))
     return ran
   })
 
@@ -158,7 +229,8 @@ export const register: Register = on => {
     const done = await next(e)
     if (e.agentId === undefined) {
       const state: TowerState = e.isAborted ? 'idle' : e.reason === 'answer' ? 'done' : 'failed'
-      void safely(save($, { state, last: oneLine(e.answer.split('\n').find(l => l.trim()) ?? '') }))
+      const answer = e.answer
+      void safely(save($, { state, last: firstLine(answer), need: undefined }).then(() => (state === 'done' ? settle($, answer) : undefined)))
     }
     return done
   })
@@ -168,7 +240,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A row under where-am-i's, only while another session waits for you.
+  // A row under where-am-i's, only while another session waits for you, saying for what.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
     if (e.props.hasSurvey) return rest
@@ -183,8 +255,12 @@ export const register: Register = on => {
         {rest}
         <Box flexDirection="row" flexWrap="wrap">
           {waiting.map(it => (
-            <Text color="warning" bold>
-              ✋ {it.repo} 在等你 {it.age}
+            <Text color="warning">
+              <Text bold>
+                {it.icon} {it.repo}
+              </Text>{' '}
+              {it.label}
+              {it.what ? `：${it.what}` : ''} <Text dimColor>{it.age}</Text>
               {'   '}
             </Text>
           ))}
@@ -225,6 +301,13 @@ export const register: Register = on => {
                 <Text color={look.color}> {look.label} {ago(now - s.since)}</Text>
                 {s.id === self && <Text dimColor> (本会话)</Text>}
               </Text>
+              {s.state === 'waiting' && s.need && (
+                <Text color="warning" wrap="truncate-end">
+                  {'   '}
+                  {NEED_LOOK[s.need.kind].icon} {NEED_LOOK[s.need.kind].label}
+                  {s.need.what ? `：${s.need.what}` : ''}
+                </Text>
+              )}
               <Text wrap="truncate-end">   🎯 {oneLine(what, width - 6)}</Text>
               {s.last !== '' && s.state !== 'working' && (
                 <Text dimColor wrap="truncate-end">   ↳ {oneLine(s.last, width - 6)}</Text>
