@@ -6,6 +6,10 @@ const PANE = 'control-tower'
 const SESSIONS = { plugin: 'control-tower', key: 'sessions' } as const
 const SELF = { plugin: 'control-tower', key: 'self' } as const
 const NOW = { plugin: 'control-tower', key: 'now' } as const
+const DISMISSED = { plugin: 'control-tower', key: 'dismissed' } as const
+
+/** Shared by every session, beside their own files: which waits you waved off. */
+const DISMISSED_FILE = '_dismissed.json'
 
 /** A session that has not written for this long has exited or crashed. */
 const GONE_AFTER_MS = 90_000
@@ -50,15 +54,41 @@ export const NEED_LOOK: Record<NeedKind, { icon: string; label: string }> = {
   action: { icon: '👉', label: '要你操作' },
 }
 
-export type BannerItem = { id: string; hostId?: string; repo: string; age: string; icon: string; label: string; what: string }
+export type BannerItem = {
+  id: string
+  hostId?: string
+  since: number
+  repo: string
+  age: string
+  icon: string
+  label: string
+  what: string
+}
+
+/** Whether you waved off this very wait (a later one, with a new `since`, shows again). */
+export const isDismissed = (s: TowerEntry, dismissed: Record<string, number>) => dismissed[s.id] === s.since
 
 /** The banner: only the other sessions waiting for you, and what each wants. */
-export function bannerOf(entries: readonly TowerEntry[], self: string, now: number): BannerItem[] {
+export function bannerOf(
+  entries: readonly TowerEntry[],
+  self: string,
+  now: number,
+  dismissed: Record<string, number> = {},
+): BannerItem[] {
   return arrange(entries, now)
-    .filter(s => s.id !== self && s.state === 'waiting')
+    .filter(s => s.id !== self && s.state === 'waiting' && !isDismissed(s, dismissed))
     .map(s => {
       const look = s.need ? NEED_LOOK[s.need.kind] : { icon: '✋', label: '在等你' }
-      return { id: s.id, hostId: s.hostId, repo: s.repo, age: ago(now - s.since), icon: look.icon, label: look.label, what: s.need?.what ?? '' }
+      return {
+        id: s.id,
+        hostId: s.hostId,
+        since: s.since,
+        repo: s.repo,
+        age: ago(now - s.since),
+        icon: look.icon,
+        label: look.label,
+        what: s.need?.what ?? '',
+      }
     })
 }
 
@@ -183,7 +213,7 @@ async function scan($: EngineInterface) {
   const files = await $.fs.list(dir).catch(() => [])
   for (const f of files) {
     // Files untouched for a day belong to long-gone sessions: skip without reading.
-    if (!f.name.endsWith('.json') || now - f.mtimeMs > 86_400_000) continue
+    if (!f.name.endsWith('.json') || f.name.startsWith('_') || now - f.mtimeMs > 86_400_000) continue
     try {
       found.push(JSON.parse(String(await $.fs.read(`${dir}/${f.name}`))) as TowerEntry)
     } catch {
@@ -192,6 +222,24 @@ async function scan($: EngineInterface) {
   }
   await $.state.set(SESSIONS, arrange(found, now))
   await $.state.set(NOW, now)
+  await $.state.set(DISMISSED, await readDismissed($))
+}
+
+async function readDismissed($: EngineInterface): Promise<Record<string, number>> {
+  try {
+    return JSON.parse(String(await $.fs.read(`${dir}/${DISMISSED_FILE}`))) as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
+/** Waves off one session's current wait, for every session's banner. */
+async function dismiss($: EngineInterface, id: string, since: number) {
+  if (dir === '') return
+  const live = new Set((await $.state.get(SESSIONS)).value?.map(s => s.id) ?? [])
+  const kept = Object.fromEntries(Object.entries(await readDismissed($)).filter(([k]) => live.has(k)))
+  await $.fs.write(`${dir}/${DISMISSED_FILE}`, JSON.stringify({ ...kept, [id]: since }))
+  await scan($)
 }
 
 function safely(work: Promise<unknown>) {
@@ -262,7 +310,8 @@ export const register: Register = on => {
     const { value: sessions = [] } = await $.state.get(SESSIONS)
     const { value: self = '' } = await $.state.get(SELF)
     const { value: now = 0 } = await $.state.get(NOW)
-    const waiting = bannerOf(sessions, self, now)
+    const { value: dismissed = {} } = await $.state.get(DISMISSED)
+    const waiting = bannerOf(sessions, self, now, dismissed)
     if (waiting.length === 0) return rest
     const { Box, Text, Button } = $.ui.resolve(e)
     return (
@@ -278,14 +327,19 @@ export const register: Register = on => {
                   label={`${it.icon} ${it.repo} ${it.label}${it.what ? `：${it.what}` : ''} ${it.age}`}
                   onPress={() => openSession($, it.hostId)}
                 />
+                <Text> </Text>
+                <Button key={`done-${it.id}`} plain dimColor label="✓" onPress={() => dismiss($, it.id, it.since)} />
                 <Text>{'   '}</Text>
               </Box>
             ) : (
-              <Text color="warning">
-                {it.icon} {it.repo} {it.label}
-                {it.what ? `：${it.what}` : ''} {it.age}
-                {'   '}
-              </Text>
+              <Box>
+                <Text color="warning">
+                  {it.icon} {it.repo} {it.label}
+                  {it.what ? `：${it.what}` : ''} {it.age}{' '}
+                </Text>
+                <Button key={`done-${it.id}`} plain dimColor label="✓" onPress={() => dismiss($, it.id, it.since)} />
+                <Text>{'   '}</Text>
+              </Box>
             ),
           )}
           <Button key="tower" label="tower" plain onPress={() => $.ui.open({ id: PANE, title: '🗼 Control tower' })} />
@@ -299,6 +353,7 @@ export const register: Register = on => {
     const { value: sessions = [] } = await $.state.get(SESSIONS)
     const { value: self = '' } = await $.state.get(SELF)
     const { value: now = 0 } = await $.state.get(NOW)
+    const { value: dismissed = {} } = await $.state.get(DISMISSED)
     const width = Math.max(30, e.props.bodyColumns)
     const repoWidth = Math.min(24, Math.max(...sessions.map(s => s.repo.length), 8))
 
@@ -338,12 +393,18 @@ export const register: Register = on => {
                   {s.id === self && <Text dimColor> (本会话)</Text>}
                 </Text>
               )}
-              {s.state === 'waiting' && s.need && (
-                <Text color="warning" wrap="truncate-end">
-                  {'   '}
-                  {NEED_LOOK[s.need.kind].icon} {NEED_LOOK[s.need.kind].label}
-                  {s.need.what ? `：${s.need.what}` : ''}
-                </Text>
+              {s.state === 'waiting' && s.id !== self && (
+                <Box>
+                  <Text color={isDismissed(s, dismissed) ? 'inactive' : 'warning'} wrap="truncate-end">
+                    {'   '}
+                    {s.need ? `${NEED_LOOK[s.need.kind].icon} ${NEED_LOOK[s.need.kind].label}` : '✋ 在等你'}
+                    {s.need?.what ? `：${s.need.what}` : ''}
+                    {isDismissed(s, dismissed) ? '（已忽略）' : '  '}
+                  </Text>
+                  {!isDismissed(s, dismissed) && (
+                    <Button key={`done-${s.id}`} plain dimColor label="✓ 忽略" onPress={() => dismiss($, s.id, s.since)} />
+                  )}
+                </Box>
               )}
               <Text wrap="truncate-end">   🎯 {oneLine(what, width - 6)}</Text>
               {s.last !== '' && s.state !== 'working' && (

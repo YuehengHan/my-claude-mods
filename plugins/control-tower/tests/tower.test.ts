@@ -34,7 +34,7 @@ test('the banner lists only other sessions waiting for you', async () => {
     'me',
     NOW,
   )
-  expect(b).toEqual([{ id: 'b', hostId: undefined, repo: 'backend-ng', age: '2m', icon: '✋', label: '在等你', what: '' }])
+  expect(b).toEqual([{ id: 'b', hostId: undefined, since: NOW - 120_000, repo: 'backend-ng', age: '2m', icon: '✋', label: '在等你', what: '' }])
 })
 
 test('durations', async () => {
@@ -82,4 +82,11 @@ test('only a desktop session id makes a link', async () => {
   expect(sessionLink(undefined)).toBeNull()
   expect(sessionLink('5f431199-ef67-436b-9e96-e8581a869130')).toBeNull()
   expect(sessionLink('local_x; rm -rf ~')).toBeNull()
+})
+
+test('a dismissed wait leaves the banner until the session waits again', async () => {
+  const waiting = s({ id: 'b', repo: 'backend-ng', state: 'waiting', since: NOW - 60_000 })
+  expect(bannerOf([waiting], 'me', NOW, { b: NOW - 60_000 })).toEqual([])
+  // A new wait has a new since: it is back.
+  expect(bannerOf([{ ...waiting, since: NOW - 5_000 }], 'me', NOW, { b: NOW - 60_000 }).map(i => i.repo)).toEqual(['backend-ng'])
 })

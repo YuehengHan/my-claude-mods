@@ -21,6 +21,12 @@ export type TowerEntry = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'control-tower': { sessions: TowerEntry[]; self: string; now: number }
+    'control-tower': {
+      sessions: TowerEntry[]
+      self: string
+      now: number
+      /** Session id → the `since` of the waiting you dismissed; a new wait shows again. */
+      dismissed: Record<string, number>
+    }
   }
 }
